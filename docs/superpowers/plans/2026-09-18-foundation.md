@@ -516,35 +516,36 @@ git commit -m "Add RLS policies: anonymous read-only, authenticated read/write, 
 ```sql
 -- supabase/migrations/0003_totals_view.sql
 create view phase_totals as
+with entry_totals as (
+  select
+    phase_agency_id,
+    sum(inward_mt) as inward_mt,
+    sum(
+      coalesce(soil_mt,0) + coalesce(rdf_mt,0) + coalesce(stones_mt,0) +
+      coalesce(inert_mt,0) + coalesce(steel_mt,0) + coalesce(tyre_mt,0) +
+      coalesce(wood_mt,0) + coalesce(glass_mt,0) + coalesce(iron_scrap_mt,0) +
+      coalesce(wires_cables_mt,0) + coalesce(others_mt,0)
+    ) as disposed_mt,
+    max(report_date) as last_report_date
+  from bio_mining_entries
+  where deleted_at is null
+  group by phase_agency_id
+)
 select
   pm.id as phase_agency_id,
   pm.phase,
   pm.agency,
   pm.order_qty_mt,
   pm.status,
-  coalesce(sum(e.inward_mt), 0)::numeric(12,2) as cumulative_inward_mt,
-  coalesce(sum(
-    coalesce(e.soil_mt,0) + coalesce(e.rdf_mt,0) + coalesce(e.stones_mt,0) +
-    coalesce(e.inert_mt,0) + coalesce(e.steel_mt,0) + coalesce(e.tyre_mt,0) +
-    coalesce(e.wood_mt,0) + coalesce(e.glass_mt,0) + coalesce(e.iron_scrap_mt,0) +
-    coalesce(e.wires_cables_mt,0) + coalesce(e.others_mt,0)
-  ), 0)::numeric(12,2) as cumulative_disposed_mt,
-  (
-    coalesce(sum(e.inward_mt), 0) -
-    coalesce(sum(
-      coalesce(e.soil_mt,0) + coalesce(e.rdf_mt,0) + coalesce(e.stones_mt,0) +
-      coalesce(e.inert_mt,0) + coalesce(e.steel_mt,0) + coalesce(e.tyre_mt,0) +
-      coalesce(e.wood_mt,0) + coalesce(e.glass_mt,0) + coalesce(e.iron_scrap_mt,0) +
-      coalesce(e.wires_cables_mt,0) + coalesce(e.others_mt,0)
-    ), 0)
-  )::numeric(12,2) as balance_mt,
+  coalesce(et.inward_mt, 0)::numeric(12,2) as cumulative_inward_mt,
+  coalesce(et.disposed_mt, 0)::numeric(12,2) as cumulative_disposed_mt,
+  (coalesce(et.inward_mt, 0) - coalesce(et.disposed_mt, 0))::numeric(12,2) as balance_mt,
   case when pm.order_qty_mt = 0 then 0
-    else round(coalesce(sum(e.inward_mt), 0) / pm.order_qty_mt * 100, 2)
+    else round(coalesce(et.inward_mt, 0) / pm.order_qty_mt * 100, 2)
   end as pct_of_order,
-  max(e.report_date) as last_report_date
+  et.last_report_date
 from phase_master pm
-left join bio_mining_entries e on e.phase_agency_id = pm.id and e.deleted_at is null
-group by pm.id;
+left join entry_totals et on et.phase_agency_id = pm.id;
 
 create view phase_material_breakdown as
 with materials as (
