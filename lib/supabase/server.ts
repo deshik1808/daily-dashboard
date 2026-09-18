@@ -18,7 +18,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // Called from a Server Component render; middleware (Task 7) refreshes the session instead.
+            // Called from a Server Component render; proxy (Task 7) refreshes the session instead.
           }
         },
       },
