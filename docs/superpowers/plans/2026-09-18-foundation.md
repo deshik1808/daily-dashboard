@@ -837,7 +837,7 @@ Practically: from the running app, sign in, then in the browser console or via a
 **Files:** none (repo/hosting provisioning only)
 
 **Interfaces:**
-- Produces: a GitHub remote for this repo at `https://github.com/deshik1808/daily-dashboard.git`, and a Vercel project auto-deploying on push to `main`, with the three Supabase env vars configured in Vercel.
+- Produces: a GitHub remote for this repo at `https://github.com/deshik1808/daily-dashboard.git`, and a Vercel project auto-deploying on push to `master` (production) or any other branch (preview), with the three Supabase env vars configured in Vercel. Pushing `foundation` now produces a preview deployment, not production — production only happens once `master` itself is updated at branch-finish time.
 
 - [ ] **Step 1: Check for GitHub CLI auth**
 
@@ -860,10 +860,12 @@ If `EXISTS`:
 git remote add origin https://github.com/deshik1808/daily-dashboard.git
 ```
 
-- [ ] **Step 3: Push**
+- [ ] **Step 3: Push the `foundation` branch (not `master`)**
+
+This plan is being executed on an isolated `foundation` branch/worktree precisely so `master` stays clean until the final whole-branch review passes. Push the branch itself, not `master` — the merge into `master` (and the push that actually triggers Vercel's production deploy) happens later, via `finishing-a-development-branch`, after all 10 tasks are reviewed.
 
 ```bash
-git push -u origin master
+git push -u origin foundation
 ```
 
 - [ ] **Step 3: Create the Vercel project linked to the GitHub repo**
@@ -876,7 +878,7 @@ Use the Vercel MCP tools to set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABAS
 
 - [ ] **Step 5: Trigger and verify the first deploy**
 
-Use the Vercel MCP `get_deployment` / `get_deployment_build_logs` tools after the push-triggered deploy starts. Expected: build succeeds, deployment status `READY`.
+Use the Vercel MCP `get_deployment` / `get_deployment_build_logs` tools after the push-triggered deploy starts. Expected: build succeeds, deployment status `READY`. This will be a **preview** deployment (triggered by the `foundation` branch push, not `master`) — that's expected at this stage; production deploy happens once `master` is updated at branch-finish time.
 
 - [ ] **Step 6: No commit** (no files changed — this task is infra-only)
 
