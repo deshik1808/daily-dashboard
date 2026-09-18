@@ -836,19 +836,32 @@ Practically: from the running app, sign in, then in the browser console or via a
 **Files:** none (repo/hosting provisioning only)
 
 **Interfaces:**
-- Produces: a GitHub remote for this repo, and a Vercel project auto-deploying on push to `main`, with the three Supabase env vars configured in Vercel.
+- Produces: a GitHub remote for this repo at `https://github.com/deshik1808/daily-dashboard.git`, and a Vercel project auto-deploying on push to `main`, with the three Supabase env vars configured in Vercel.
 
 - [ ] **Step 1: Check for GitHub CLI auth**
 
 ```bash
 gh auth status
 ```
-If authenticated, continue. If not, tell Deshik to run `gh auth login`, or create the repo manually at github.com and provide the remote URL.
+If authenticated, continue. If not, tell Deshik to run `gh auth login`, or push manually and skip to Step 3.
 
-- [ ] **Step 2: Create the GitHub repo and push**
+- [ ] **Step 2: Point at the repo Deshik designated — create it if it doesn't exist yet, otherwise just add the remote**
 
 ```bash
-gh repo create project-status-dashboard --private --source=. --remote=origin
+gh repo view deshik1808/daily-dashboard >/dev/null 2>&1 && echo EXISTS || echo MISSING
+```
+If `MISSING`:
+```bash
+gh repo create deshik1808/daily-dashboard --private --source=. --remote=origin
+```
+If `EXISTS`:
+```bash
+git remote add origin https://github.com/deshik1808/daily-dashboard.git
+```
+
+- [ ] **Step 3: Push**
+
+```bash
 git push -u origin master
 ```
 
