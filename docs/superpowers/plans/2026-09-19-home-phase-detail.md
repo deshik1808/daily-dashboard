@@ -20,7 +20,7 @@
 - Date filter on Phase detail implements exactly two states — **Last 30 days** (default) and **All time** — per the PRD's explicit acceptance criteria. A custom date-range picker is out of scope for this plan (the brainstorming mockup showed a placeholder chip for it, but the PRD only requires these two states as v1 acceptance criteria).
 - MRF's Home card has no % stat (MRF has no order-qty concept) and is not a link — its detail screen (the MRF log feed) is a separate, not-yet-built spec. Its metadata (title, agency, location) is hardcoded in the Home page; only its "last updated" date is a live query against `mrf_logs`.
 - No automated test suite (deliberate project-wide decision, from the Foundation design doc). Verification is: `npm run build` succeeding, and using the Claude Browser tool against `npm run dev` at a mobile viewport (375×812) to visually confirm each screen — this is the test gate for every task in this plan.
-- Work happens on `master` directly (per Deshik: local-only for now, no worktree/branch requested for this plan) — commit frequently, verify the build after every task.
+- Deployment/production verification is out of scope for this plan (per Deshik: local-only for now) — but implementation still happens on an isolated worktree/branch per the usual process, merged back once reviewed. Commit frequently, verify the build after every task.
 
 ---
 
