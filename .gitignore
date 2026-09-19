@@ -46,6 +46,7 @@ next-env.d.ts
 
 # superpowers scratch state (sdd task briefs/reports, brainstorm mockups)
 .superpowers/
+.claude/
 
 # PWA build output
 public/sw.js
