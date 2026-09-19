@@ -25,18 +25,26 @@ export default async function PhaseDetailPage({
 
   const supabase = await createClient();
 
-  const { data: phase } = await supabase
+  const { data: phase, error: phaseError } = await supabase
     .from("phase_totals")
     .select("*")
     .eq("phase_agency_id", id)
     .maybeSingle();
 
+  if (phaseError) {
+    console.error("phase_totals query failed", phaseError);
+  }
+
   if (!phase) notFound();
 
-  const { data: materials } = await supabase
+  const { data: materials, error: materialsError } = await supabase
     .from("phase_material_breakdown")
     .select("material, disposed_mt, share_pct")
     .eq("phase_agency_id", id);
+
+  if (materialsError) {
+    console.error("phase_material_breakdown query failed", materialsError);
+  }
 
   let entriesQuery = supabase
     .from("bio_mining_entries")
@@ -48,12 +56,15 @@ export default async function PhaseDetailPage({
     .order("report_date", { ascending: false });
 
   if (!isAllTime) {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    entriesQuery = entriesQuery.gte("report_date", thirtyDaysAgo.toISOString().slice(0, 10));
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    entriesQuery = entriesQuery.gte("report_date", thirtyDaysAgo);
   }
 
-  const { data: entries } = await entriesQuery;
+  const { data: entries, error: entriesError } = await entriesQuery;
+
+  if (entriesError) {
+    console.error("bio_mining_entries query failed", entriesError);
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -125,6 +136,7 @@ export default async function PhaseDetailPage({
                     {new Date(e.report_date).toLocaleDateString("en-IN", {
                       day: "2-digit",
                       month: "short",
+                      timeZone: "UTC",
                     })}
                   </div>
                   <div className="font-mono text-[10px] text-accent-blue">

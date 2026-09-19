@@ -28,4 +28,5 @@ body {
   background: var(--color-bezel);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  color-scheme: light;
 }

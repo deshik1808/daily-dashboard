@@ -12,7 +12,11 @@ const LOCATION: Record<string, string> = {
 
 function formatDate(d: string | null) {
   if (!d) return "no reports yet";
-  return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  return new Date(d).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
+  });
 }
 
 export default async function Home() {
@@ -21,18 +25,26 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: phases } = await supabase
+  const { data: phases, error: phasesError } = await supabase
     .from("phase_totals")
     .select("phase_agency_id, phase, agency, status, pct_of_order, last_report_date")
     .order("phase", { ascending: true });
 
-  const { data: mrfLatest } = await supabase
+  if (phasesError) {
+    console.error("phase_totals query failed", phasesError);
+  }
+
+  const { data: mrfLatest, error: mrfError } = await supabase
     .from("mrf_logs")
     .select("log_date")
     .is("deleted_at", null)
     .order("log_date", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (mrfError) {
+    console.error("mrf_logs query failed", mrfError);
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -47,7 +59,7 @@ export default async function Home() {
         )}
 
         {(phases ?? []).map((p) => (
-          <Link key={p.phase_agency_id} href={`/phase/${p.phase_agency_id}`}>
+          <Link key={p.phase_agency_id} href={`/phase/${p.phase_agency_id}`} className="block">
             <Window title={`BIO-MINING · PHASE ${p.phase} · ${p.agency!.toUpperCase()}`}>
               <div className="flex items-center justify-between">
                 <div>
