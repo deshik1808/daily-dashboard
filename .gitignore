@@ -44,6 +44,9 @@ next-env.d.ts
 # git worktrees (pre-existing repo convention)
 .worktrees/
 
+# superpowers scratch state (sdd task briefs/reports, brainstorm mockups)
+.superpowers/
+
 # PWA build output
 public/sw.js
 public/workbox-*.js
