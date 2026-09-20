@@ -11,13 +11,11 @@ export function Chip({
   active?: boolean;
 }) {
   const variantClass: Record<ChipVariant, string> = {
-    default: "border-ink",
+    default: "border-sage text-muted",
     done: "border-ink bg-ink text-paper",
-    progress: "border-accent-blue text-accent-blue",
+    progress: "border-accent-ink/50 bg-accent/10 text-accent-ink",
   };
-  const classes = active
-    ? "border-ink bg-ink text-paper"
-    : variantClass[variant];
+  const classes = active ? "border-ink bg-ink text-paper" : variantClass[variant];
 
   return (
     <span

@@ -2,6 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const EDITOR_ONLY_PREFIXES = ["/entry", "/mrf/new", "/mrf/edit"];
+// /phase/<id>/edit sits under an otherwise public prefix, so it needs its own match.
+const EDITOR_ONLY_PATTERNS = [/^\/phase\/[^/]+\/edit\/?$/];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -29,7 +31,10 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isEditorOnlyPath = EDITOR_ONLY_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p));
+  const { pathname } = request.nextUrl;
+  const isEditorOnlyPath =
+    EDITOR_ONLY_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    EDITOR_ONLY_PATTERNS.some((re) => re.test(pathname));
 
   if (isEditorOnlyPath && !user) {
     const url = request.nextUrl.clone();

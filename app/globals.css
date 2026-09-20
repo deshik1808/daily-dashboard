@@ -1,11 +1,21 @@
 @import "tailwindcss";
 
 @theme {
-  --color-paper: #ffffff;
-  --color-ink: #000000;
-  --color-bezel: #282725;
-  --color-accent-orange: #f37725;
-  --color-accent-blue: #3685c5;
+  /* Surfaces — sage-tinted neutrals. Nothing is pure black or pure white. */
+  --color-paper: #fbfbfa;
+  --color-mist: #eff3f1;
+  --color-canvas: #e3ebe7;
+  --color-ink: #1e2624;
+  --color-bezel: #2d3936;
+
+  /* Palette — sage carries structure, bronze is the single accent.
+     Warm accent against cool neutrals; each has a display tone (fills/marks)
+     and a text tone that clears AA on paper and canvas. */
+  --color-sage: #aab8b5;
+  --color-muted: #55625e;
+  --color-accent: #c9903f;
+  --color-accent-ink: #8b5a1c;
+  --color-alert: #9e3328;
 
   --font-mono: var(--font-courier-prime), ui-monospace, monospace;
   --font-sans: Verdana, Geneva, sans-serif;
@@ -14,14 +24,21 @@
   --radius-control: 4px;
 }
 
+/* Takes its colour from `currentColor`, so `text-accent-ink` tints the mark. */
 @utility bg-dither {
   background-image:
-    linear-gradient(45deg, #000 25%, transparent 25%),
-    linear-gradient(-45deg, #000 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #000 75%),
-    linear-gradient(-45deg, transparent 75%, #000 75%);
+    linear-gradient(45deg, currentColor 25%, transparent 25%),
+    linear-gradient(-45deg, currentColor 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, currentColor 75%),
+    linear-gradient(-45deg, transparent 75%, currentColor 75%);
   background-size: 4px 4px;
   background-position: 0 0, 0 2px, 2px -2px, -2px 0px;
+}
+
+/* The frame the app window sits in — a barely-there gradient reads as material
+   rather than a flat fill, without introducing a second visible colour. */
+@utility bg-bezel-grade {
+  background-image: linear-gradient(170deg, #35413e 0%, var(--color-bezel) 45%, #26302e 100%);
 }
 
 body {
@@ -29,4 +46,23 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   color-scheme: light;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-ink);
+}
+
+/* Form controls: one focus treatment for the whole app, in the accent hue. */
+input,
+textarea,
+select {
+  background: var(--color-paper);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-accent-ink);
+  outline-offset: 1px;
 }

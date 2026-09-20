@@ -23,7 +23,7 @@ export function MaterialTable({ rows }: { rows: MaterialRow[] }) {
   return (
     <table className="w-full border-collapse font-mono text-xs">
       <thead>
-        <tr className="border-b border-ink text-left text-[10px] tracking-wide">
+        <tr className="border-b border-ink text-left text-[10px] tracking-wide text-muted">
           <th className="pb-1.5 font-normal">MATERIAL</th>
           <th className="pb-1.5 text-right font-normal">MT</th>
           <th className="pb-1.5 text-right font-normal">SHARE</th>
@@ -31,26 +31,26 @@ export function MaterialTable({ rows }: { rows: MaterialRow[] }) {
       </thead>
       <tbody>
         {primaryRows.map((r) => (
-          <tr key={r.material} className="border-b border-ink/20">
+          <tr key={r.material} className="border-b border-sage/70">
             <td className="py-1.5">{r.material}</td>
             <td className="py-1.5 text-right">{fmt(r.disposed_mt)}</td>
             <td className="py-1.5 text-right">{r.share_pct.toFixed(1)}%</td>
           </tr>
         ))}
         <tr
-          className="cursor-pointer border-b border-ink/20 italic"
+          className="cursor-pointer border-b border-sage/70 italic"
           onClick={() => setExpanded((e) => !e)}
         >
           <td className="py-1.5">
             Others{" "}
-            <span className="text-accent-blue">({expanded ? "hide" : "view breakdown"})</span>
+            <span className="text-accent-ink">({expanded ? "hide" : "view breakdown"})</span>
           </td>
           <td className="py-1.5 text-right">{fmt(othersTotal)}</td>
           <td className="py-1.5 text-right">{othersShare.toFixed(1)}%</td>
         </tr>
         {expanded &&
           otherRows.map((r) => (
-            <tr key={r.material} className="text-[11px] text-ink/70">
+            <tr key={r.material} className="text-[11px] text-muted">
               <td className="py-1 pl-3.5">{r.material}</td>
               <td className="py-1 text-right">{fmt(r.disposed_mt)}</td>
               <td className="py-1 text-right">{r.share_pct.toFixed(1)}%</td>

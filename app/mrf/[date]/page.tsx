@@ -1,0 +1,148 @@
+// app/mrf/[date]/page.tsx
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { TopBar } from "@/components/design/TopBar";
+import { BottomNav } from "@/components/design/BottomNav";
+import { Window } from "@/components/design/Window";
+import { FormattedNote } from "@/components/design/FormattedNote";
+import { PhotoGallery } from "@/components/design/PhotoGallery";
+import { signMrfPhotoUrls } from "@/lib/supabase/storage";
+import { formatMrfDate } from "@/lib/mrf-dates";
+import { ReplyButton } from "@/components/design/ReplyButton";
+
+export default async function MrfDatePage({
+  params,
+}: {
+  params: Promise<{ date: string }>;
+}) {
+  const { date } = await params;
+
+  // Validate the date format (YYYY-MM-DD).
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) notFound();
+  const parsed = new Date(date + "T00:00:00Z");
+  if (isNaN(parsed.getTime())) notFound();
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Fetch the log for this exact date.
+  const { data: log, error } = await supabase
+    .from("mrf_logs")
+    .select("id, log_date, note, photo_paths")
+    .is("deleted_at", null)
+    .eq("log_date", date)
+    .maybeSingle();
+
+  if (error) console.error("mrf_logs date query failed", error);
+
+  // Fetch adjacent logged dates for prev/next navigation.
+  const [{ data: prevRows }, { data: nextRows }] = await Promise.all([
+    supabase
+      .from("mrf_logs")
+      .select("log_date")
+      .is("deleted_at", null)
+      .lt("log_date", date)
+      .order("log_date", { ascending: false })
+      .limit(1),
+    supabase
+      .from("mrf_logs")
+      .select("log_date")
+      .is("deleted_at", null)
+      .gt("log_date", date)
+      .order("log_date", { ascending: true })
+      .limit(1),
+  ]);
+
+  const prevDate = prevRows?.[0]?.log_date ?? null;
+  const nextDate = nextRows?.[0]?.log_date ?? null;
+
+  // Sign photo URLs if there's a log.
+  const photoUrls = log
+    ? await signMrfPhotoUrls(supabase, log.photo_paths ?? [])
+    : {};
+
+  const displayDate = formatMrfDate(date).toUpperCase();
+
+  return (
+    <div className="flex h-full flex-col">
+      <TopBar title={`MRF · ${displayDate}`} backHref="/mrf" />
+      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3">
+        {log ? (
+          <>
+            <Window title={displayDate}>
+              <PhotoGallery
+                photos={(log.photo_paths ?? [])
+                  .filter((path) => photoUrls[path])
+                  .map((path) => ({ path, url: photoUrls[path] }))}
+              />
+              {user && (
+                <div className="mt-2.5 flex justify-end border-t border-sage/70 pt-2.5">
+                  <Link
+                    href={`/mrf/edit/${log.id}`}
+                    className="min-h-[32px] rounded-control border border-ink px-2.5 py-1 font-mono text-[10px] font-bold tracking-wide hover:bg-ink hover:text-paper"
+                  >
+                    EDIT
+                  </Link>
+                </div>
+              )}
+            </Window>
+            {(log.note ?? "").trim() ? (
+              <Window title="NOTES">
+                <FormattedNote content={log.note} />
+              </Window>
+            ) : null}
+          </>
+        ) : (
+          <Window title="NO LOG">
+            <p className="font-mono text-xs text-muted">
+              No log recorded for {displayDate.toLowerCase()}.
+            </p>
+            <div className="mt-2.5">
+              <Link
+                href="/mrf"
+                className="font-mono text-xs text-accent-ink underline"
+              >
+                ← BACK TO ALL LOGS
+              </Link>
+            </div>
+          </Window>
+        )}
+
+        {/* Prev / Next day navigation */}
+        <div className="flex justify-between gap-2">
+          {prevDate ? (
+            <Link
+              href={`/mrf/${prevDate}`}
+              className="flex-1 rounded-control border border-ink py-2.5 text-center font-mono text-[10px] font-bold tracking-wide hover:bg-ink hover:text-paper"
+            >
+              ‹ {formatMrfDate(prevDate).toUpperCase()}
+            </Link>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {nextDate ? (
+            <Link
+              href={`/mrf/${nextDate}`}
+              className="flex-1 rounded-control border border-ink py-2.5 text-center font-mono text-[10px] font-bold tracking-wide hover:bg-ink hover:text-paper"
+            >
+              {formatMrfDate(nextDate).toUpperCase()} ›
+            </Link>
+          ) : (
+            <span className="flex-1" />
+          )}
+        </div>
+      </div>
+      <BottomNav active="home" />
+      <ReplyButton
+        context={{
+          label: `MRF Plant · ${formatMrfDate(date)}`,
+          path: `/mrf/${date}`,
+        }}
+        isEditor={!!user}
+      />
+    </div>
+  );
+}

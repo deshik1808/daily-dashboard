@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       bio_mining_entries: {
         Row: {
           created_at: string
@@ -101,6 +119,47 @@ export type Database = {
           },
         ]
       }
+      doc_nodes: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          kind: Database["public"]["Enums"]["doc_node_kind"]
+          parent_id: string | null
+          title: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          kind: Database["public"]["Enums"]["doc_node_kind"]
+          parent_id?: string | null
+          title: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["doc_node_kind"]
+          parent_id?: string | null
+          title?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_nodes_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "doc_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mrf_logs: {
         Row: {
           created_at: string
@@ -118,7 +177,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           log_date: string
-          note?: string
+          note: string
           photo_paths?: string[]
           updated_at?: string
         }
@@ -138,7 +197,9 @@ export type Database = {
         Row: {
           agency: Database["public"]["Enums"]["agency_enum"]
           created_at: string
+          current_note: string
           id: string
+          note_updated_at: string | null
           order_qty_mt: number
           phase: Database["public"]["Enums"]["phase_enum"]
           status: Database["public"]["Enums"]["phase_status_enum"]
@@ -147,7 +208,9 @@ export type Database = {
         Insert: {
           agency: Database["public"]["Enums"]["agency_enum"]
           created_at?: string
+          current_note?: string
           id?: string
+          note_updated_at?: string | null
           order_qty_mt: number
           phase: Database["public"]["Enums"]["phase_enum"]
           status: Database["public"]["Enums"]["phase_status_enum"]
@@ -156,11 +219,31 @@ export type Database = {
         Update: {
           agency?: Database["public"]["Enums"]["agency_enum"]
           created_at?: string
+          current_note?: string
           id?: string
+          note_updated_at?: string | null
           order_qty_mt?: number
           phase?: Database["public"]["Enums"]["phase_enum"]
           status?: Database["public"]["Enums"]["phase_status_enum"]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      short_links: {
+        Row: {
+          created_at: string
+          path: string
+          short_url: string
+        }
+        Insert: {
+          created_at?: string
+          path: string
+          short_url: string
+        }
+        Update: {
+          created_at?: string
+          path?: string
+          short_url?: string
         }
         Relationships: []
       }
@@ -181,7 +264,9 @@ export type Database = {
           balance_mt: number | null
           cumulative_disposed_mt: number | null
           cumulative_inward_mt: number | null
+          current_note: string | null
           last_report_date: string | null
+          note_updated_at: string | null
           order_qty_mt: number | null
           pct_of_order: number | null
           phase: Database["public"]["Enums"]["phase_enum"] | null
@@ -196,6 +281,7 @@ export type Database = {
     }
     Enums: {
       agency_enum: "Zigma" | "Card Box"
+      doc_node_kind: "folder" | "link"
       phase_enum: "I" | "II" | "III"
       phase_status_enum: "Completed" | "In progress"
       shift_enum: "Day" | "Night" | "Full day"
@@ -327,6 +413,7 @@ export const Constants = {
   public: {
     Enums: {
       agency_enum: ["Zigma", "Card Box"],
+      doc_node_kind: ["folder", "link"],
       phase_enum: ["I", "II", "III"],
       phase_status_enum: ["Completed", "In progress"],
       shift_enum: ["Day", "Night", "Full day"],

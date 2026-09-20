@@ -223,3 +223,28 @@ the running app:
 7. Signed out: EDIT button absent, links still open, and a direct action call is refused.
 
 Screenshots of the working result are shared rather than asking the user to check manually.
+
+## Amendments
+
+### 2026-09-20 — Back button in the Doc Bank top bar
+
+The `/doc-bank` top bar gains the same back button every other non-Home screen in the app
+carries: the ink chevron rendered by `TopBar`, sitting in the hatch rule band to the left of
+the title, linking to `/`.
+
+- **Why a fixed `backHref="/"` and not history:** the Doc Bank is a bottom-nav tab, so the
+  back button means "up to the dashboard", exactly as on `/mrf`. A `router.back()` would
+  drop a Viewer who arrived from a `/m/` reply link straight back out of the app.
+- **Why `DocTree` takes a `backHref` prop instead of hardcoding it:** navigation knowledge
+  stays with the page, matching how `TopBar`'s other callers pass `backHref`.
+- The button is `aria-label="Back"` and toggles nothing else; the EDIT action stays pinned to
+  the right edge, unchanged.
+
+```tsx
+// app/doc-bank/page.tsx
+<DocTree tree={tree} isEditor={!!user} backHref="/" />
+```
+
+**Verification:** `tsc --noEmit`, `npm run lint`, `node --test tests/*.test.mjs` — then `/doc-bank` at
+390px with EDIT visible: chevron sits left of the title, tap returns to Home, no overlap with
+EDIT or the bottom nav. No new tests; the change is markup only.
