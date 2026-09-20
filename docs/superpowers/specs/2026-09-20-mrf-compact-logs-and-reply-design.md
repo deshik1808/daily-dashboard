@@ -182,3 +182,41 @@ Node test files under `tests/`, matching the existing `*.test.mjs` convention:
 3. Compact list replacing the expanded cards.
 4. Reply button, page by page.
 5. Vercel rename, then re-share the link.
+
+## Amendments
+
+### 2026-09-20 — Reply pill glyph
+
+The button keeps its labelled-pill form: an icon plus the word `REPLY`, outlined in ink on
+paper, at the current `fixed bottom-20 right-4` position. An icon-only circle was
+considered and rejected — the Viewer uses the app rarely, and a bare glyph makes the
+first tap a guess. A pill that collapses to a circle on scroll was also rejected: it
+would turn a pure server-rendered anchor into a client component with a scroll listener.
+
+The glyph changes from the text character `↩` to an inline SVG reply arrow:
+
+```tsx
+<svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+     stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+     strokeLinejoin="round" aria-hidden className="shrink-0">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
+</svg>
+```
+
+- **Why SVG:** the character renders at Courier Prime's mercy and sits off-baseline on
+  Android. A path does not.
+- **Why inline, not an icon package:** the app has no icon dependency, and one 14px path
+  does not justify adding one.
+- **Why a reply arrow rather than the WhatsApp mark:** it stays inside the 1-bit line
+  vocabulary and does not bake a third-party brand into the design system or tie the
+  button to one channel.
+- `stroke="currentColor"` inverts the icon along with the text on the existing
+  `hover:bg-ink hover:text-paper`.
+
+Everything else is unchanged: pill geometry, `aria-label`, server-only rendering,
+hidden-for-Editor and missing-number behaviour, and `lib/reply.ts`.
+
+**Verification:** `tsc --noEmit`, `eslint`, then `/mrf` signed out in a phone-width
+browser — pill renders, glyph is crisp, hover inverts both text and icon. No new tests;
+there is no new logic and `buildReplyHref` is already covered.
