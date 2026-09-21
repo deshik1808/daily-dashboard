@@ -4,7 +4,7 @@
 // GET    /api/push/vapid-public-key — return the VAPID public key to clients
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export async function GET() {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid subscription object" }, { status: 400 });
   }
 
-  // Use the anon client — the insert policy allows anon + authenticated.
-  const supabase = await createClient();
+  // Use service client to ensure upsert never hits RLS / permission issues
+  const supabase = createServiceClient();
 
   const { error } = await supabase.from("push_subscriptions").upsert(
     {
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     console.error("[push/route] Failed to save subscription:", error);
-    return NextResponse.json({ error: "Could not save subscription" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Could not save subscription" }, { status: 500 });
   }
 
   return NextResponse.json({ success: true }, { status: 201 });
@@ -49,7 +49,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Missing endpoint" }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   const { error } = await supabase
     .from("push_subscriptions")
@@ -58,7 +58,7 @@ export async function DELETE(req: NextRequest) {
 
   if (error) {
     console.error("[push/route] Failed to delete subscription:", error);
-    return NextResponse.json({ error: "Could not remove subscription" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Could not remove subscription" }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

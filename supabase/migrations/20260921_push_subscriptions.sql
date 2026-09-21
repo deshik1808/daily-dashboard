@@ -23,6 +23,17 @@ CREATE POLICY "push_sub_delete"
   TO anon, authenticated
   USING (true);
 
+CREATE POLICY "push_sub_update"
+  ON push_subscriptions FOR UPDATE
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "push_sub_select"
+  ON push_subscriptions FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
 CREATE POLICY "push_sub_select_service"
   ON push_subscriptions FOR SELECT
   TO service_role
