@@ -33,6 +33,11 @@ async function resolveLink(context: ReplyContext): Promise<string> {
     return buildFallbackUrl(mrfDateMatch[1]);
   }
 
+  // Use the caller-provided short path if available (e.g. /p/1z for phases).
+  if (context.shortPath) {
+    return `${getAppOrigin()}${context.shortPath}`;
+  }
+
   // For other pages, use the app origin + canonical path.
   return `${getAppOrigin()}${context.path}`;
 }

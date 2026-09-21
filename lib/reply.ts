@@ -4,6 +4,8 @@
 export interface ReplyContext {
   label: string;
   path: string;
+  /** Deterministic short path (e.g. "/p/1z") used when no cached short link exists. */
+  shortPath?: string;
 }
 
 /**
