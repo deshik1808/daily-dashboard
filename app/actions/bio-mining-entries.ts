@@ -5,8 +5,10 @@ import { revalidatePath } from "next/cache";
 import { updateTag } from "next/cache";
 import { TAGS } from "@/lib/data";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { validateEntry, MATERIAL_FIELDS } from "@/lib/entries";
+import { sendPushNotification } from "@/lib/push";
 
 export interface EntryFormState {
   errors?: Record<string, string>;
@@ -72,6 +74,18 @@ export async function createEntry(
   revalidatePath(`/phase/${phaseAgencyId}`);
   updateTag(TAGS.entries);
   updateTag(TAGS.phases);
+
+  // Fire push notification after the response — never blocks the Editor.
+  after(async () => {
+    const date = validation.value!.report_date as string;
+    const shift = (validation.value!.shift as string) ?? "";
+    await sendPushNotification({
+      title: "New Bio-Mining Entry",
+      body: `Entry added for ${date}${shift ? ` (${shift} shift)` : ""}.`,
+      url: `/phase/${phaseAgencyId}`,
+    });
+  });
+
   redirect(`/phase/${phaseAgencyId}`);
 }
 

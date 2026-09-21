@@ -1,4 +1,4 @@
-// app/actions/mrf-logs.ts
+﻿// app/actions/mrf-logs.ts
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
@@ -8,6 +8,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { validateMrfLog } from "@/lib/mrf";
 import { getOrCreateShortLink } from "@/lib/short-links";
+import { sendPushNotification } from "@/lib/push";
 
 export interface MrfFormState {
   errors?: Record<string, string>;
@@ -83,6 +84,17 @@ export async function createMrfLog(
   revalidatePath(`/mrf/${validation.value.log_date}`);
   updateTag(TAGS.mrfLogs);
   scheduleShortLink(validation.value.log_date);
+
+  // Fire push notification after the response --- never blocks the Editor.
+  const logDate = validation.value.log_date;
+  after(async () => {
+    await sendPushNotification({
+      title: "New MRF Log",
+      body: `MRF log added for ${logDate}.`,
+      url: `/mrf/${logDate}`,
+    });
+  });
+
   redirect(`/mrf/${validation.value.log_date}`);
 }
 
