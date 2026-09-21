@@ -12,6 +12,15 @@ export const metadata: Metadata = {
   title: "Project Status Dashboard",
   description: "Daily progress tracker for Bio-Mining and MRF projects, Tirupati",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
