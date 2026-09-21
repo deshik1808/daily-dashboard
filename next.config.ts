@@ -20,8 +20,6 @@ const config: NextConfig =
     : withPWAInit({
         dest: "public",
         register: true,
-        // Merge our push-event handler into the workbox-generated SW.
-        customWorkerSrc: "public/sw-custom.js",
         workboxOptions: {
           disableDevLogs: true,
         },
