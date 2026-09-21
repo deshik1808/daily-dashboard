@@ -16,7 +16,6 @@ export function PushSubscription() {
   const [permission, setPermission] = useState<NotificationPermission | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [bannerVisible, setBannerVisible] = useState(false);
-  const [testSent, setTestSent] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -131,24 +130,7 @@ export function PushSubscription() {
     localStorage.setItem("push_prompt_dismissed", "true");
   }
 
-  function handleSendTest() {
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/push/test", { method: "POST" });
-        if (res.ok) {
-          setTestSent(true);
-          setTimeout(() => setTestSent(false), 5000);
-        } else {
-          setStatusMessage("Test notification failed to dispatch.");
-        }
-      } catch (err) {
-        console.error(err);
-        setStatusMessage("Error triggering test push.");
-      }
-    });
-  }
-
-  if (supported === false) return null;
+  if (supported === false || isSubscribed && !bannerVisible) return null;
 
   return (
     <>
@@ -186,21 +168,6 @@ export function PushSubscription() {
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Floating test/status trigger in bottom right when already subscribed */}
-      {isSubscribed && !bannerVisible && (
-        <div className="fixed bottom-20 right-3 z-40 sm:bottom-6 sm:right-6">
-          <button
-            type="button"
-            onClick={handleSendTest}
-            disabled={isPending || testSent}
-            title="Send test push notification to this device"
-            className="flex items-center gap-1.5 border border-ink bg-mist px-2.5 py-1 font-mono text-[11px] font-bold text-ink shadow-sm transition-transform active:scale-95 disabled:opacity-60"
-          >
-            <span>{testSent ? "✓ Sent!" : isPending ? "Sending..." : "🔔 Test Push"}</span>
-          </button>
         </div>
       )}
     </>
