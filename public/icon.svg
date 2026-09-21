@@ -1,26 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Matte Ink Canvas -->
-  <rect width="512" height="512" rx="112" fill="#1e2624"/>
+  <!-- Pure White Base -->
+  <rect width="512" height="512" rx="108" fill="#ffffff"/>
   
-  <!-- Subtle Architectural Bezel & Hairline Border -->
-  <rect width="512" height="512" rx="112" fill="none" stroke="#2d3936" stroke-width="4"/>
-  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="#fbfbfa" stroke-opacity="0.08" stroke-width="2"/>
+  <!-- Subtle Outer Hairline Border for Light Themes -->
+  <rect width="512" height="512" rx="108" fill="none" stroke="#e2e8f0" stroke-width="4"/>
 
-  <!-- Center Graphic: Minimal Precision Metric Structure -->
-  <g transform="translate(136, 136)">
-    <!-- Base Structural Line -->
-    <line x1="20" y1="216" x2="220" y2="216" stroke="#55625e" stroke-width="8" stroke-linecap="round"/>
+  <!-- Minimalist Black Bar Chart Emblem -->
+  <g fill="#1e2624">
+    <!-- Baseline -->
+    <rect x="96" y="364" width="320" height="14" rx="7"/>
 
-    <!-- Left Bar (Bio-Mining / Sage) -->
-    <rect x="40" y="116" width="36" height="100" rx="6" fill="#aab8b5"/>
-    
-    <!-- Center Hero Bar (Tirupati Municipal / Bronze Accent) -->
-    <rect x="102" y="56" width="36" height="160" rx="6" fill="#c9903f"/>
+    <!-- Bar 1 (Left) -->
+    <rect x="132" y="240" width="52" height="100" rx="10"/>
 
-    <!-- Right Bar (MRF Processed / Warm Paper) -->
-    <rect x="164" y="96" width="36" height="120" rx="6" fill="#fbfbfa"/>
+    <!-- Bar 2 (Center) -->
+    <rect x="220" y="170" width="52" height="170" rx="10"/>
 
-    <!-- Top Accent Metric Dot -->
-    <circle cx="120" cy="28" r="8" fill="#c9903f"/>
+    <!-- Bar 3 (Right) -->
+    <rect x="308" y="104" width="52" height="236" rx="10"/>
   </g>
 </svg>
