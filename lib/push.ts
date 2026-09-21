@@ -10,8 +10,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 function getVapidConfig() {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const mailto = process.env.VAPID_MAILTO;
-  if (!publicKey || !privateKey || !mailto) return null;
+  const rawMailto = process.env.VAPID_MAILTO || "admin@daily-dashboard.vercel.app";
+  const mailto = rawMailto.startsWith("mailto:") ? rawMailto : `mailto:${rawMailto}`;
+  if (!publicKey || !privateKey) return null;
   return { publicKey, privateKey, mailto };
 }
 

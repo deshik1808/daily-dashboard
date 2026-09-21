@@ -1,86 +1,227 @@
 // components/PushSubscription.tsx
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 /**
- * Silent background component that:
- * 1. Fetches the VAPID public key from the server.
- * 2. Subscribes this browser to Web Push (requesting permission once).
- * 3. Saves the subscription to /api/push.
- *
- * On subsequent visits the existing subscription is silently re-synced.
- * Renders nothing visible — place in the root layout.
+ * Handles Web Push subscription:
+ * 1. If permission is already granted, silently subscribes and syncs to /api/push.
+ * 2. If permission is not yet granted, displays a styled prompt banner so the user
+ *    can trigger Notification.requestPermission() via a genuine user gesture (required
+ *    by iOS Safari and modern Android Chrome).
+ * 3. Provides a "Send Test Notification" action to verify end-to-end delivery.
  */
 export function PushSubscription() {
-  const subscribed = useRef(false);
+  const [supported, setSupported] = useState<boolean | null>(null);
+  const [permission, setPermission] = useState<NotificationPermission | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [bannerVisible, setBannerVisible] = useState(false);
+  const [testSent, setTestSent] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
+  // Initial check on mount
   useEffect(() => {
-    if (subscribed.current) return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (typeof window === "undefined") return;
 
-    subscribed.current = true;
+    const isPushSupported =
+      "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
-    async function subscribe() {
-      try {
-        // Fetch the VAPID public key
-        const keyRes = await fetch("/api/push");
-        if (!keyRes.ok) return; // Not configured — skip silently
-        const { publicKey } = await keyRes.json();
-        if (!publicKey) return;
+    setSupported(isPushSupported);
 
-        const registration = await navigator.serviceWorker.ready;
+    if (!isPushSupported) return;
 
-        // Check existing subscription first
-        const existing = await registration.pushManager.getSubscription();
-        if (existing) {
-          // Re-sync to ensure DB has it (handles reinstalls)
-          await syncSubscription(existing);
-          return;
+    const currentPerm = Notification.permission;
+    setPermission(currentPerm);
+
+    if (currentPerm === "granted") {
+      // If already granted, perform silent registration and sync
+      doSubscribe(false);
+    } else if (currentPerm === "default") {
+      // Show prompt banner so user gesture can trigger permission dialog
+      const dismissed = localStorage.getItem("push_prompt_dismissed");
+      if (!dismissed) {
+        setBannerVisible(true);
+      }
+    }
+  }, []);
+
+  async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
+    try {
+      let reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        reg = await navigator.serviceWorker.register("/sw.js");
+      }
+      await navigator.serviceWorker.ready;
+      return reg;
+    } catch (err) {
+      console.warn("[PushSubscription] Service worker error:", err);
+      return null;
+    }
+  }
+
+  async function doSubscribe(userGesture = true) {
+    setStatusMessage(null);
+    try {
+      // 1. Get VAPID public key
+      const keyRes = await fetch("/api/push");
+      if (!keyRes.ok) {
+        setStatusMessage("Push not configured on server.");
+        return;
+      }
+      const { publicKey } = await keyRes.json();
+      if (!publicKey) {
+        setStatusMessage("Missing VAPID key.");
+        return;
+      }
+
+      // 2. Request permission if needed
+      let perm = Notification.permission;
+      if (perm !== "granted" && userGesture) {
+        perm = await Notification.requestPermission();
+        setPermission(perm);
+      }
+
+      if (perm !== "granted") {
+        if (perm === "denied") {
+          setStatusMessage("Notifications blocked in browser settings.");
         }
+        return;
+      }
 
-        // Request permission
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") return;
+      // 3. Register service worker and subscribe
+      const registration = await getRegistration();
+      if (!registration) {
+        setStatusMessage("Service worker unavailable.");
+        return;
+      }
 
-        // Subscribe
-        const subscription = await registration.pushManager.subscribe({
+      let sub = await registration.pushManager.getSubscription();
+      if (!sub) {
+        sub = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer,
         });
-
-        await syncSubscription(subscription);
-      } catch (err) {
-        console.warn("[PushSubscription] Could not subscribe:", err);
       }
+
+      // 4. Sync subscription to backend
+      const res = await syncSubscription(sub);
+      if (res.ok) {
+        setIsSubscribed(true);
+        setStatusMessage("Subscribed! Device is ready for notifications.");
+        // Hide prompt banner after 3 seconds
+        setTimeout(() => setBannerVisible(false), 3000);
+      } else {
+        setStatusMessage("Failed to register subscription on server.");
+      }
+    } catch (err) {
+      console.error("[PushSubscription] Subscribe error:", err);
+      setStatusMessage("Could not subscribe device.");
     }
+  }
 
-    subscribe();
-  }, []);
+  function handleEnable() {
+    startTransition(async () => {
+      await doSubscribe(true);
+    });
+  }
 
-  // Nothing rendered — purely background behaviour.
-  return null;
+  function handleDismiss() {
+    setBannerVisible(false);
+    localStorage.setItem("push_prompt_dismissed", "true");
+  }
+
+  function handleSendTest() {
+    startTransition(async () => {
+      try {
+        const res = await fetch("/api/push/test", { method: "POST" });
+        if (res.ok) {
+          setTestSent(true);
+          setTimeout(() => setTestSent(false), 5000);
+        } else {
+          setStatusMessage("Test notification failed to dispatch.");
+        }
+      } catch (err) {
+        console.error(err);
+        setStatusMessage("Error triggering test push.");
+      }
+    });
+  }
+
+  if (supported === false) return null;
+
+  return (
+    <>
+      {/* Permission prompt banner */}
+      {bannerVisible && (
+        <div className="fixed bottom-20 left-3 right-3 z-50 mx-auto max-w-md border border-ink bg-mist p-3.5 font-mono text-xs shadow-lg sm:bottom-6 sm:left-auto sm:right-6 sm:max-w-sm">
+          <div className="flex items-start gap-3">
+            <span className="text-xl leading-none select-none">🔔</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-ink">Enable Push Notifications</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                Receive instant alerts whenever the Editor logs new daily progress entries.
+              </p>
+
+              {statusMessage && (
+                <p className="mt-2 text-[11px] font-bold text-accent-ink">{statusMessage}</p>
+              )}
+
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleEnable}
+                  disabled={isPending || isSubscribed}
+                  className="rounded-control bg-ink px-3 py-1.5 font-bold text-paper transition-transform active:scale-95 disabled:opacity-50"
+                >
+                  {isPending ? "Connecting..." : isSubscribed ? "Enabled ✓" : "Allow Notifications"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  className="px-2 py-1.5 text-muted hover:text-ink"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating test/status trigger in bottom right when already subscribed */}
+      {isSubscribed && !bannerVisible && (
+        <div className="fixed bottom-20 right-3 z-40 sm:bottom-6 sm:right-6">
+          <button
+            type="button"
+            onClick={handleSendTest}
+            disabled={isPending || testSent}
+            title="Send test push notification to this device"
+            className="flex items-center gap-1.5 border border-ink bg-mist px-2.5 py-1 font-mono text-[11px] font-bold text-ink shadow-sm transition-transform active:scale-95 disabled:opacity-60"
+          >
+            <span>{testSent ? "✓ Sent!" : isPending ? "Sending..." : "🔔 Test Push"}</span>
+          </button>
+        </div>
+      )}
+    </>
+  );
 }
 
 async function syncSubscription(sub: PushSubscription) {
   const json = sub.toJSON();
-  if (!json.keys?.p256dh || !json.keys?.auth) return;
-  await fetch("/api/push", {
+  return fetch("/api/push", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       endpoint: sub.endpoint,
-      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
     }),
   });
 }
 
-/** Convert a URL-safe base64 string to a Uint8Array for applicationServerKey. */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
-
-
