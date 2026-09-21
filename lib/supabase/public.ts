@@ -29,3 +29,8 @@ export const publicSupabase = createSupabaseClient<Database>(
     },
   }
 );
+
+export function createPublicClient() {
+  return publicSupabase;
+}
+

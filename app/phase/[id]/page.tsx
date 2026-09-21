@@ -11,6 +11,7 @@ import { MaterialTable, type MaterialRow } from "@/components/design/MaterialTab
 import { ProjectNote } from "@/components/design/ProjectNote";
 import { ReplyButton } from "@/components/design/ReplyButton";
 import { AnimatedNumber } from "@/components/design/AnimatedNumber";
+import { phaseToCode } from "@/lib/phase-codes";
 
 function fmtMT(n: number | null) {
   return (n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -182,6 +183,7 @@ export default async function PhaseDetailPage({
           context={{
             label: `Bio-Mining Phase ${phase.phase} · ${phase.agency}`,
             path: `/phase/${id}`,
+            shortPath: phase.phase && phase.agency ? `/p/${phaseToCode(phase.phase, phase.agency)}` : undefined,
           }}
           isEditor={isEditor}
         />
