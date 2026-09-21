@@ -2,6 +2,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
+import { TAGS } from "@/lib/data";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { validateEntry, MATERIAL_FIELDS } from "@/lib/entries";
@@ -68,6 +70,8 @@ export async function createEntry(
 
   revalidatePath("/");
   revalidatePath(`/phase/${phaseAgencyId}`);
+  updateTag(TAGS.entries);
+  updateTag(TAGS.phases);
   redirect(`/phase/${phaseAgencyId}`);
 }
 
@@ -99,6 +103,8 @@ export async function updateEntry(
 
   revalidatePath("/");
   revalidatePath(`/phase/${phaseAgencyId}`);
+  updateTag(TAGS.entries);
+  updateTag(TAGS.phases);
   redirect(`/phase/${phaseAgencyId}`);
 }
 
@@ -123,5 +129,7 @@ export async function deleteEntry(entryId: string, phaseAgencyId: string): Promi
 
   revalidatePath("/");
   revalidatePath(`/phase/${phaseAgencyId}`);
+  updateTag(TAGS.entries);
+  updateTag(TAGS.phases);
   redirect(`/phase/${phaseAgencyId}`);
 }

@@ -220,3 +220,53 @@ hidden-for-Editor and missing-number behaviour, and `lib/reply.ts`.
 **Verification:** `tsc --noEmit`, `eslint`, then `/mrf` signed out in a phone-width
 browser — pill renders, glyph is crisp, hover inverts both text and icon. No new tests;
 there is no new logic and `buildReplyHref` is already covered.
+
+### 2026-09-21 — Reply pill anchoring and the shared-link origin
+
+Two defects found after the first real WhatsApp shares.
+
+**The pill collided with the nav on Chrome but not Brave.** `env(safe-area-inset-bottom)`
+was applied twice — once by the root shell's padding and again by `BottomNav` — and the
+pill's `fixed bottom-20` was a guess at the resulting nav height, measured against the
+*viewport* rather than the shell. Browsers that hand the gesture area to the page report
+a non-zero inset and the two overlapped; Brave's bottom toolbar consumes that area, so
+its inset is zero and the spacing looked correct. Measured on a 375×812 viewport:
+
+| `safe-area-inset-bottom` | gap before | gap after |
+| --- | --- | --- |
+| 0px (Brave-like) | 31.2px | 31.2px |
+| 16px (Android gesture bar) | **−0.8px, overlapping** | 31.2px |
+| 34px (iPhone gesture bar) | **−36.8px, overlapping** | 31.2px |
+
+The inset is now applied only by the root shell, and the pill renders as a child of
+`BottomNav` at `absolute bottom-full … mb-8 sm:mb-12` — measured from the nav's own top
+edge, so the clearance holds at any nav height. `mb-8` reproduces the 31px Brave spacing
+that was the one we liked. `BottomNav` gains an optional `children` slot and is the
+positioning context; the five pages now nest `<ReplyButton>` inside it.
+
+**Shared links pointed at the protected deployment host.** `APP_ORIGIN` was never set, so
+both the shortener and the pill fell through to `VERCEL_URL` — the *per-deployment* host
+(`daily-dashboard-e7bx8es7g-…vercel.app`). That URL is long and sits behind Deployment
+Protection, so every link already sent to WhatsApp opened a Vercel login wall rather than
+the dashboard. Origin resolution moves to `lib/app-origin.ts` and now prefers
+`VERCEL_PROJECT_PRODUCTION_URL` (the stable production alias) over `VERCEL_URL`, which
+survives only as a preview fallback. `APP_ORIGIN` still overrides both and is the setting
+to use once a custom domain exists. No Vercel configuration is required — the production
+alias is a system variable.
+
+Links stayed long for a second reason: only the MRF save actions minted, so Home, phase
+pages, `/mrf` and Doc Bank never got a `short_links` row and always fell back to
+`origin + path`. `ReplyButton` now mints lazily on an Editor page view, as this spec
+already called for, via `after()` so nothing blocks the render — and it runs before the
+hidden-for-Editor return, since the Editor is the only role permitted to write.
+
+**Guard.** `.env.local` points a local Editor at the production Supabase, and the cache is
+keyed by path with no record of which origin minted a row. Lazy minting on every page
+view would therefore let one `next dev` visit cache a `http://localhost:3000` link that
+every Viewer then receives. `getOrCreateShortLink` now refuses to mint when the origin is
+local, protecting the MRF save path too.
+
+**Verification:** `tsc --noEmit`, `eslint`, `next build`, and 96 tests (11 new, covering
+origin precedence, the local-origin guard, and that minting shortens the production alias
+rather than the per-deployment host). Pill clearance re-measured at insets 0/16/34/48 —
+constant 31.2px, nav a constant 48.8px.

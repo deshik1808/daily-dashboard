@@ -3,20 +3,12 @@
 // The Editor mints links on save; viewers never call the shortener.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isoToYYMMDD } from "@/lib/mrf-dates";
+import { isoToYYMMDD } from "./mrf-dates.ts";
+import { getAppOrigin } from "./app-origin.ts";
 
 const ISGD_API = "https://is.gd/create.php";
 const TIMEOUT_MS = 3_000;
-
-/**
- * Returns the app origin from env, falling back to the Vercel-provided host.
- */
-function getAppOrigin(): string {
-  if (process.env.APP_ORIGIN) return process.env.APP_ORIGIN;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  // Local development fallback.
-  return "http://localhost:3000";
-}
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|$)/i;
 
 /**
  * Builds the `/m/YYMMDD` fallback path for a given ISO date.
@@ -51,7 +43,18 @@ export async function getOrCreateShortLink(
   if (cached?.short_url) return cached.short_url;
 
   // 2. Mint via is.gd.
-  const longUrl = `${getAppOrigin()}${canonicalPath}`;
+  const origin = getAppOrigin();
+
+  // `.env.local` points a local Editor at the *production* Supabase, so minting
+  // from `next dev` would cache a link to http://localhost:3000 that every
+  // Viewer then receives. The cache is keyed by path only, with no notion of
+  // which origin minted it, so one dev page view would poison it for everyone.
+  if (LOCAL_ORIGIN.test(origin)) {
+    console.warn(`skipping short link for ${canonicalPath}: origin is local (${origin})`);
+    return null;
+  }
+
+  const longUrl = `${origin}${canonicalPath}`;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

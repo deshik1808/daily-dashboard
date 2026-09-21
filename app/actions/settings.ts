@@ -2,7 +2,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+import { TAGS } from "@/lib/data";
 
 const DEFAULT_PHONE = process.env.REPLY_WHATSAPP_NUMBER || "910000000000";
 
@@ -73,5 +74,6 @@ export async function updateReplyWhatsAppNumber(rawNumber: string): Promise<{
   }
 
   revalidatePath("/", "layout");
+  updateTag(TAGS.settings);
   return { success: true, number: cleaned };
 }

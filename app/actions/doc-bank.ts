@@ -1,7 +1,9 @@
 // app/actions/doc-bank.ts
 "use server";
 
+import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { TAGS } from "@/lib/data";
 
 export interface DocActionResult {
   success: boolean;
@@ -121,6 +123,7 @@ export async function createNode(
     };
   }
 
+  updateTag(TAGS.docNodes);
   return { success: true };
 }
 
@@ -199,6 +202,7 @@ export async function renameNode(
     };
   }
 
+  updateTag(TAGS.docNodes);
   return { success: true };
 }
 
@@ -225,5 +229,6 @@ export async function deleteNode(id: string): Promise<DocActionResult> {
     };
   }
 
+  updateTag(TAGS.docNodes);
   return { success: true };
 }

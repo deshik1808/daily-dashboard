@@ -57,7 +57,7 @@ export function DocTree({ tree, isEditor, backHref }: DocTreeProps) {
                 setIsEditMode((prev) => !prev);
                 setActiveCreate(null);
               }}
-              className="rounded-control border border-ink px-2.5 py-1 font-mono text-[10px] font-bold tracking-wide hover:bg-ink hover:text-paper"
+              className="rounded-control border border-ink bg-ink px-2.5 py-1 font-mono text-[10px] font-bold tracking-wide text-paper hover:bg-ink/90"
             >
               {isEditMode ? "DONE" : "EDIT"}
             </button>

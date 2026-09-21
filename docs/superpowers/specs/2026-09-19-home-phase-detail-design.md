@@ -29,8 +29,8 @@ A strict monochrome 1-bit aesthetic inspired by classic OS chrome — approved v
 ## 3. Home screen
 
 Five project cards, each a `Window` component:
-- Title bar: `PHASE {I/II/III} · {AGENCY}` for bio-mining projects, `MRF PLANT · {AGENCY}` for the MRF row.
-- Content row: location (bold, Verdana) + last-updated date (small, Courier Prime) on the left; a right-aligned block with the stat and a status `Chip` (`COMPLETED` = black-filled chip, `IN PROGRESS` = blue-outlined chip).
+- Title bar: `PHASE {I/II/III} · {LOCATION}` for bio-mining projects (as built: `BIO-MINING · PHASE {I/II/III} · {LOCATION}`), `MRF PLANT · {LOCATION}` for the MRF row. *Agency and location traded places on 2026-09-21 — see Amendments.*
+- Content row: agency (bold, Verdana) + last-updated date (small, Courier Prime) on the left; a right-aligned block with the stat and a status `Chip` (`COMPLETED` = black-filled chip, `IN PROGRESS` = blue-outlined chip).
 - **No progress bar** — cumulative % of order is shown as a plain large stat (Courier Prime, bold, 24px), not a bar. This was an explicit correction during mockup review (first draft had a dithered bar; removed).
 - **MRF's card has no stat at all** — it has no order-qty/% figure (its PRD scope is daily photos+notes only, no tonnage target). Its right-side stat area is empty; only the status chip and last-updated date show. (Decided over two alternatives — "days logged" and "days since last log" — both rejected in favor of just omitting the stat.)
 - No combined Phase III total anywhere (Zigma and Card Box stay fully separate cards, per PRD).
@@ -56,3 +56,21 @@ PRD specifies bottom navigation (mobile-first). Implemented as a bordered bar fi
 ## 7. Testing / verification
 
 Same approach as the Foundation plan: no automated test suite (deliberate, per PRD/design-doc decision). Verification is manual — `npm run build` + `npm run dev` locally against real Supabase data (the live project already has schema/RLS/views from Foundation), then a phone check once this is deployed. Since Deshik asked to stay local-only for now, the phone/production-deploy check is deferred until he chooses to deploy again; local verification (desktop + a mobile-width browser emulation) is the gate for this spec.
+
+## Amendments
+
+### 2026-09-21 — Location sits in the card title bar, agency in the card body
+
+Requested by Deshik: on the five Home cards the two names trade places. The window title bar
+carries the **location** (`BIO-MINING · PHASE III · RAMAPURAM`, `MRF PLANT · THUKIVAKAM`) and the
+bold body line carries the **agency** (`Zigma`, `Card Box`, `Raghuram Hume Pipes`). Nothing else
+on the card moves — the last-updated date, the status `Chip`, and the in-progress-first ordering
+are unchanged, and the card stays one tap target to the same destination.
+
+- The title bar stays uppercase Courier Prime chrome text; the body line keeps the agency's own
+  mixed case, the way `Ramapuram` read before the swap.
+- The body line for Bio-Mining reads `phase_totals.agency` directly. The title bar looks the
+  location up in `app/page.tsx`'s `LOCATION` map and falls back to the agency name when an agency
+  has no location mapped, so a newly added agency can never render a dangling `·` in the title.
+- Home cards only. The Phase detail and MRF `/mrf` **top bars** are untouched and still read
+  `PHASE {I/II/III} · {AGENCY}` / `MRF PLANT · RAGHURAM HUME PIPES`.

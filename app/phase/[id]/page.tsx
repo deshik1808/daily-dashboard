@@ -1,7 +1,8 @@
 // app/phase/[id]/page.tsx
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { isEditor as getIsEditor } from "@/lib/auth";
+import { getPhaseById, getPhaseMaterials, getPhaseEntries } from "@/lib/data";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
 import { Window } from "@/components/design/Window";
@@ -9,6 +10,7 @@ import { StatGrid } from "@/components/design/StatGrid";
 import { MaterialTable, type MaterialRow } from "@/components/design/MaterialTable";
 import { ProjectNote } from "@/components/design/ProjectNote";
 import { ReplyButton } from "@/components/design/ReplyButton";
+import { AnimatedNumber } from "@/components/design/AnimatedNumber";
 
 function fmtMT(n: number | null) {
   return (n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -25,54 +27,24 @@ export default async function PhaseDetailPage({
   const { range } = await searchParams;
   const isAllTime = range === "all";
 
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const isEditor = !!user;
-
-  const { data: phase, error: phaseError } = await supabase
-    .from("phase_totals")
-    .select("*")
-    .eq("phase_agency_id", id)
-    .maybeSingle();
-
-  if (phaseError) {
-    console.error("phase_totals query failed", phaseError);
-  }
-
-  if (!phase) notFound();
-
-  const { data: materials, error: materialsError } = await supabase
-    .from("phase_material_breakdown")
-    .select("material, disposed_mt, share_pct")
-    .eq("phase_agency_id", id);
-
-  if (materialsError) {
-    console.error("phase_material_breakdown query failed", materialsError);
-  }
-
-  let entriesQuery = supabase
-    .from("bio_mining_entries")
-    .select(
-      "id, report_date, shift, inward_mt, soil_mt, rdf_mt, stones_mt, inert_mt, steel_mt, tyre_mt, wood_mt, glass_mt, iron_scrap_mt, wires_cables_mt, others_mt"
-    )
-    .eq("phase_agency_id", id)
-    .is("deleted_at", null)
-    .order("report_date", { ascending: false });
-
+  // The 30-day window is computed here, outside the cache scope: a `use cache`
+  // function must be deterministic, so baking `Date.now()` into one would pin
+  // the cached entry to whatever day it was first rendered.
+  let since: string | null = null;
   if (!isAllTime) {
     // eslint-disable-next-line react-hooks/purity
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    entriesQuery = entriesQuery.gte("report_date", thirtyDaysAgo);
+    since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   }
 
-  const { data: entries, error: entriesError } = await entriesQuery;
+  // All cached except the session check, which is a local token verification.
+  const [isEditor, phase, materials, entries] = await Promise.all([
+    getIsEditor(),
+    getPhaseById(id),
+    getPhaseMaterials(id),
+    getPhaseEntries(id, since),
+  ]);
 
-  if (entriesError) {
-    console.error("bio_mining_entries query failed", entriesError);
-  }
+  if (!phase) notFound();
 
   return (
     <div className="flex h-full flex-col">
@@ -80,18 +52,20 @@ export default async function PhaseDetailPage({
         title={`PHASE ${phase.phase} · ${phase.agency!.toUpperCase()}`}
         backHref="/"
       />
-      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3">
+      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3 animate-fade-in">
         <Window title="ORDER SUMMARY">
           <StatGrid
             stats={[
-              { label: "ORDER QTY", value: fmtMT(phase.order_qty_mt) },
-              { label: "CUM. INWARD", value: fmtMT(phase.cumulative_inward_mt) },
-              { label: "CUM. DISPOSED", value: fmtMT(phase.cumulative_disposed_mt) },
-              { label: "PROCESSING LOSS", value: fmtMT(phase.balance_mt), accent: true },
+              { label: "ORDER QTY", numericValue: phase.order_qty_mt, value: fmtMT(phase.order_qty_mt) },
+              { label: "CUM. INWARD", numericValue: phase.cumulative_inward_mt, value: fmtMT(phase.cumulative_inward_mt) },
+              { label: "CUM. DISPOSED", numericValue: phase.cumulative_disposed_mt, value: fmtMT(phase.cumulative_disposed_mt) },
+              { label: "PROCESSING LOSS", numericValue: phase.balance_mt, value: fmtMT(phase.balance_mt), accent: true },
             ]}
           />
           <div className="mt-2.5 flex items-baseline justify-between border-t border-ink pt-2.5">
-            <span className="font-mono text-3xl font-bold">{Math.round(phase.pct_of_order!)}%</span>
+            <span className="font-mono text-3xl font-bold">
+              <AnimatedNumber value={Math.round(phase.pct_of_order ?? 0)} decimals={0} suffix="%" />
+            </span>
             <span className="font-mono text-[11px] text-muted">OF ORDER QTY</span>
           </div>
           {isEditor && (
@@ -181,8 +155,12 @@ export default async function PhaseDetailPage({
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-right font-mono text-xs">
-                    <div>IN {fmtMT(e.inward_mt)}</div>
-                    <div className="text-muted">OUT {fmtMT(disposed)}</div>
+                    <div>
+                      IN <AnimatedNumber value={e.inward_mt} decimals={2} />
+                    </div>
+                    <div className="text-muted">
+                      OUT <AnimatedNumber value={disposed} decimals={2} />
+                    </div>
                   </div>
                   {isEditor && (
                     <Link
@@ -199,14 +177,15 @@ export default async function PhaseDetailPage({
           })}
         </Window>
       </div>
-      <BottomNav active="home" />
-      <ReplyButton
-        context={{
-          label: `Bio-Mining Phase ${phase.phase} · ${phase.agency}`,
-          path: `/phase/${id}`,
-        }}
-        isEditor={isEditor}
-      />
+      <BottomNav active="home">
+        <ReplyButton
+          context={{
+            label: `Bio-Mining Phase ${phase.phase} · ${phase.agency}`,
+            path: `/phase/${id}`,
+          }}
+          isEditor={isEditor}
+        />
+      </BottomNav>
     </div>
   );
 }

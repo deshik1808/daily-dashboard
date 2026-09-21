@@ -1,6 +1,8 @@
 // app/mrf/page.tsx
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isEditor } from "@/lib/auth";
+import { getMrfLogs } from "@/lib/data";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
 import { Window } from "@/components/design/Window";
@@ -12,19 +14,14 @@ import { ReplyButton } from "@/components/design/ReplyButton";
 const THUMB_LIMIT = 3;
 
 export default async function MrfPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: logs, error } = await supabase
-    .from("mrf_logs")
-    .select("id, log_date, note, photo_paths")
-    .is("deleted_at", null)
-    .order("log_date", { ascending: false })
-    .limit(30);
-
-  if (error) console.error("mrf_logs query failed", error);
+  // The log list is cached; only the photo signing below needs a live,
+  // cookie-bound client, because signed storage URLs are short-lived and so
+  // must not be cached alongside the rows.
+  const [user, logs, supabase] = await Promise.all([
+    isEditor(),
+    getMrfLogs(30),
+    createClient(),
+  ]);
 
   // Only sign the first 3 photo paths per log (max 90 signed URLs total).
   const pathsToSign = (logs ?? []).flatMap((log) =>
@@ -35,7 +32,7 @@ export default async function MrfPage() {
   return (
     <div className="flex h-full flex-col">
       <TopBar title="MRF PLANT · RAGHURAM HUME PIPES" backHref="/" />
-      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3">
+      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3 animate-fade-in">
         {user && (
           <Link
             href="/mrf/new"
@@ -69,8 +66,9 @@ export default async function MrfPage() {
           );
         })}
       </div>
-      <BottomNav active="home" />
-      <ReplyButton context={{ label: "MRF Plant · all logs", path: "/mrf" }} isEditor={!!user} />
+      <BottomNav active="home">
+        <ReplyButton context={{ label: "MRF Plant · all logs", path: "/mrf" }} isEditor={user} />
+      </BottomNav>
     </div>
   );
 }

@@ -6,12 +6,24 @@ const TABS = [
   { key: "doc-bank", label: "DOC BANK", href: "/doc-bank" },
 ] as const;
 
-export function BottomNav({ active }: { active: "home" | "doc-bank" }) {
+/**
+ * The app's bottom tab bar, and the positioning context for anything that
+ * floats just above it — pass the REPLY pill as `children`.
+ *
+ * No `env(safe-area-inset-bottom)` padding here: the root layout already insets
+ * the whole app shell by the safe area, so adding it again made the nav a full
+ * inset taller than intended on any device that reports one.
+ */
+export function BottomNav({
+  active,
+  children,
+}: {
+  active: "home" | "doc-bank";
+  children?: React.ReactNode;
+}) {
   return (
-    <div
-      className="flex border-t border-ink bg-mist font-mono text-xs tracking-wide"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-    >
+    <div className="relative flex border-t border-ink bg-mist font-mono text-xs tracking-wide">
+      {children}
       {TABS.map((tab) => {
         const isActive = active === tab.key;
         return (

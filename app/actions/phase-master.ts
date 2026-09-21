@@ -2,6 +2,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
+import { TAGS } from "@/lib/data";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { validatePhase } from "@/lib/phase";
@@ -55,5 +57,6 @@ export async function updatePhase(
 
   revalidatePath("/");
   revalidatePath(`/phase/${phaseAgencyId}`);
+  updateTag(TAGS.phases);
   redirect(`/phase/${phaseAgencyId}`);
 }

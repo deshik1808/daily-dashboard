@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isEditor } from "@/lib/auth";
+import { getMrfLogByDate, getAdjacentMrfDates } from "@/lib/data";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
 import { Window } from "@/components/design/Window";
@@ -23,41 +25,14 @@ export default async function MrfDatePage({
   const parsed = new Date(date + "T00:00:00Z");
   if (isNaN(parsed.getTime())) notFound();
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Fetch the log for this exact date.
-  const { data: log, error } = await supabase
-    .from("mrf_logs")
-    .select("id, log_date, note, photo_paths")
-    .is("deleted_at", null)
-    .eq("log_date", date)
-    .maybeSingle();
-
-  if (error) console.error("mrf_logs date query failed", error);
-
-  // Fetch adjacent logged dates for prev/next navigation.
-  const [{ data: prevRows }, { data: nextRows }] = await Promise.all([
-    supabase
-      .from("mrf_logs")
-      .select("log_date")
-      .is("deleted_at", null)
-      .lt("log_date", date)
-      .order("log_date", { ascending: false })
-      .limit(1),
-    supabase
-      .from("mrf_logs")
-      .select("log_date")
-      .is("deleted_at", null)
-      .gt("log_date", date)
-      .order("log_date", { ascending: true })
-      .limit(1),
+  // Log and neighbours are cached; the live client is only needed for signing
+  // storage URLs, which expire and so can't be cached with the rows.
+  const [user, log, { prevDate, nextDate }, supabase] = await Promise.all([
+    isEditor(),
+    getMrfLogByDate(date),
+    getAdjacentMrfDates(date),
+    createClient(),
   ]);
-
-  const prevDate = prevRows?.[0]?.log_date ?? null;
-  const nextDate = nextRows?.[0]?.log_date ?? null;
 
   // Sign photo URLs if there's a log.
   const photoUrls = log
@@ -135,14 +110,15 @@ export default async function MrfDatePage({
           )}
         </div>
       </div>
-      <BottomNav active="home" />
-      <ReplyButton
-        context={{
-          label: `MRF Plant · ${formatMrfDate(date)}`,
-          path: `/mrf/${date}`,
-        }}
-        isEditor={!!user}
-      />
+      <BottomNav active="home">
+        <ReplyButton
+          context={{
+            label: `MRF Plant · ${formatMrfDate(date)}`,
+            path: `/mrf/${date}`,
+          }}
+          isEditor={user}
+        />
+      </BottomNav>
     </div>
   );
 }

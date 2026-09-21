@@ -1,14 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatedNumber } from "./AnimatedNumber";
 
 export type MaterialRow = { material: string; disposed_mt: number; share_pct: number };
 
 const PRIMARY = ["Soil", "RDF", "Stones"];
-
-function fmt(n: number) {
-  return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 export function MaterialTable({ rows }: { rows: MaterialRow[] }) {
   const [expanded, setExpanded] = useState(false);
@@ -33,27 +30,39 @@ export function MaterialTable({ rows }: { rows: MaterialRow[] }) {
         {primaryRows.map((r) => (
           <tr key={r.material} className="border-b border-sage/70">
             <td className="py-1.5">{r.material}</td>
-            <td className="py-1.5 text-right">{fmt(r.disposed_mt)}</td>
-            <td className="py-1.5 text-right">{r.share_pct.toFixed(1)}%</td>
+            <td className="py-1.5 text-right">
+              <AnimatedNumber value={r.disposed_mt} decimals={2} />
+            </td>
+            <td className="py-1.5 text-right">
+              <AnimatedNumber value={r.share_pct} decimals={1} suffix="%" />
+            </td>
           </tr>
         ))}
         <tr
-          className="cursor-pointer border-b border-sage/70 italic"
+          className="cursor-pointer border-b border-sage/70 italic hover:bg-mist/50 transition-colors"
           onClick={() => setExpanded((e) => !e)}
         >
           <td className="py-1.5">
             Others{" "}
             <span className="text-accent-ink">({expanded ? "hide" : "view breakdown"})</span>
           </td>
-          <td className="py-1.5 text-right">{fmt(othersTotal)}</td>
-          <td className="py-1.5 text-right">{othersShare.toFixed(1)}%</td>
+          <td className="py-1.5 text-right">
+            <AnimatedNumber value={othersTotal} decimals={2} />
+          </td>
+          <td className="py-1.5 text-right">
+            <AnimatedNumber value={othersShare} decimals={1} suffix="%" />
+          </td>
         </tr>
         {expanded &&
           otherRows.map((r) => (
             <tr key={r.material} className="text-[11px] text-muted">
               <td className="py-1 pl-3.5">{r.material}</td>
-              <td className="py-1 text-right">{fmt(r.disposed_mt)}</td>
-              <td className="py-1 text-right">{r.share_pct.toFixed(1)}%</td>
+              <td className="py-1 text-right">
+                <AnimatedNumber value={r.disposed_mt} decimals={2} />
+              </td>
+              <td className="py-1 text-right">
+                <AnimatedNumber value={r.share_pct} decimals={1} suffix="%" />
+              </td>
             </tr>
           ))}
       </tbody>

@@ -1,7 +1,8 @@
 // app/actions/mrf-logs.ts
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+import { TAGS } from "@/lib/data";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -80,6 +81,7 @@ export async function createMrfLog(
   revalidatePath("/");
   revalidatePath("/mrf");
   revalidatePath(`/mrf/${validation.value.log_date}`);
+  updateTag(TAGS.mrfLogs);
   scheduleShortLink(validation.value.log_date);
   redirect(`/mrf/${validation.value.log_date}`);
 }
@@ -110,6 +112,7 @@ export async function updateMrfLog(
   revalidatePath("/");
   revalidatePath("/mrf");
   revalidatePath(`/mrf/${validation.value.log_date}`);
+  updateTag(TAGS.mrfLogs);
   scheduleShortLink(validation.value.log_date);
   redirect(`/mrf/${validation.value.log_date}`);
 }
@@ -131,5 +134,6 @@ export async function deleteMrfLog(logId: string): Promise<MrfFormState> {
 
   revalidatePath("/");
   revalidatePath("/mrf");
+  updateTag(TAGS.mrfLogs);
   redirect("/mrf");
 }
