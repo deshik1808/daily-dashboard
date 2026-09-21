@@ -94,6 +94,39 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null
   return new Promise((resolve) => canvas.toBlob(resolve, COMPRESSED_MIME, quality));
 }
 
+export function isHeicImage(file: { type?: string; name?: string }): boolean {
+  const type = (file.type || "").toLowerCase();
+  const name = (file.name || "").toLowerCase();
+  return (
+    type === "image/heic" ||
+    type === "image/heif" ||
+    name.endsWith(".heic") ||
+    name.endsWith(".heif")
+  );
+}
+
+export async function convertHeicToJpeg(file: File): Promise<File> {
+  if (!isHeicImage(file) || typeof window === "undefined") {
+    return file;
+  }
+
+  try {
+    const heic2anyModule = await import("heic2any");
+    const heic2any = heic2anyModule.default;
+    const result = await heic2any({
+      blob: file,
+      toType: "image/jpeg",
+      quality: 0.85,
+    });
+    const blob = Array.isArray(result) ? result[0] : result;
+    const newName = replaceExtension(file.name, "jpg");
+    return new File([blob], newName, { type: "image/jpeg" });
+  } catch (err) {
+    console.error("heic2any conversion failed:", err);
+    return file;
+  }
+}
+
 /**
  * Compresses to <= 250 KB / <= 1600 px wide. Never throws: if the browser can't
  * decode the file, the original is returned with skipped=true and the server
@@ -101,15 +134,17 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null
  */
 export async function compressImage(file: File): Promise<CompressionResult> {
   const originalBytes = file.size;
-  const decoded = await decode(file);
+  const wasHeic = isHeicImage(file);
+  const sourceFile = wasHeic ? await convertHeicToJpeg(file) : file;
+  const decoded = await decode(sourceFile);
 
   if (!decoded) {
-    return { file, originalBytes, compressedBytes: originalBytes, skipped: true };
+    return { file: sourceFile, originalBytes, compressedBytes: originalBytes, skipped: true };
   }
 
   const { bitmap, width, height } = decoded;
 
-  if (!needsCompression(originalBytes, width)) {
+  if (!wasHeic && !needsCompression(originalBytes, width)) {
     if ("close" in bitmap && typeof bitmap.close === "function") bitmap.close();
     return { file, originalBytes, compressedBytes: originalBytes, skipped: false };
   }
@@ -145,12 +180,13 @@ export async function compressImage(file: File): Promise<CompressionResult> {
 
   if ("close" in bitmap && typeof bitmap.close === "function") bitmap.close();
 
-  // Only take the compressed version if it actually helped.
-  if (!best || best.size >= originalBytes) {
+  // Only take the uncompressed version if it actually helped AND wasn't HEIC (HEIC must always become JPEG)
+  if (!wasHeic && (!best || best.size >= originalBytes)) {
     return { file, originalBytes, compressedBytes: originalBytes, skipped: false };
   }
 
-  const compressed = new File([best], replaceExtension(file.name), {
+  const outputBlob = best ?? sourceFile;
+  const compressed = new File([outputBlob], replaceExtension(file.name), {
     type: COMPRESSED_MIME,
     lastModified: Date.now(),
   });

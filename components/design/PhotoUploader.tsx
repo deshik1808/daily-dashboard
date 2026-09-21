@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { signMrfPhotoUrls } from "@/lib/supabase/storage";
-import { compressImage, TARGET_PHOTO_BYTES } from "@/lib/image-compression";
+import { compressImage, isHeicImage, TARGET_PHOTO_BYTES } from "@/lib/image-compression";
 import {
   MRF_PHOTO_BUCKET,
   MAX_PHOTOS,
@@ -94,10 +94,19 @@ export function PhotoUploader({
 
     for (let i = 0; i < files.length; i++) {
       const original = files[i];
-      setStatus(`COMPRESSING ${i + 1}/${files.length}...`);
+      const isHeic = isHeicImage(original);
+      setStatus(
+        isHeic
+          ? `CONVERTING HEIC ${i + 1}/${files.length}...`
+          : `COMPRESSING ${i + 1}/${files.length}...`
+      );
 
       const { file, originalBytes, compressedBytes, skipped } = await compressImage(original);
       if (skipped) {
+        if (isHeic) {
+          setLocalError(`${original.name}: Could not convert HEIC photo. Please upload a JPEG or PNG instead.`);
+          break;
+        }
         console.warn("could not decode for compression, uploading original", original.name);
       }
 
