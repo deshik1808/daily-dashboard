@@ -8,7 +8,7 @@ const SWIPE_COMMIT = 60;
 /** How much dx must dominate dy for a gesture to count as horizontal. */
 const DIRECTION_RATIO = 1.2;
 
-type Gesture = { startX: number; startY: number };
+type Gesture = { startX: number; startY: number; lastX: number; lastY: number };
 
 export function MrfDateSwipe({
   prevDate,
@@ -24,9 +24,7 @@ export function MrfDateSwipe({
   const router = useRouter();
   const gesture = useRef<Gesture | null>(null);
 
-  // Temporary on-screen tracer: visit `?swipedebug=1` on a real device to see
-  // exactly which pointer events actually arrive, since Chrome DevTools touch
-  // emulation doesn't faithfully reproduce real touch-vs-scroll arbitration.
+  // Temporary on-screen tracer: visit `?swipedebug=1` on a real device.
   const [debug, setDebug] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   useEffect(() => {
@@ -34,37 +32,41 @@ export function MrfDateSwipe({
   }, []);
   const trace = (msg: string) => setLog((prev) => [...prev.slice(-17), msg]);
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (debug) trace(`down type=${e.pointerType} x=${e.clientX.toFixed(0)} y=${e.clientY.toFixed(0)}`);
-    if (e.pointerType === "mouse") return;
+  // Touch events, not pointer events: Android hands a vertical-leaning gesture
+  // to native scrolling within ~10px and fires pointercancel, whose
+  // coordinates Chrome zeroes out — so pointer data cannot say where the
+  // finger actually travelled. touchmove/touchend keep reporting real
+  // positions even while the browser is scrolling.
+  const onTouchStart = (e: React.TouchEvent) => {
+    gesture.current = null;
+    if (e.touches.length !== 1) return;
     if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
-    gesture.current = { startX: e.clientX, startY: e.clientY };
+
+    const t = e.touches[0];
+    gesture.current = { startX: t.clientX, startY: t.clientY, lastX: t.clientX, lastY: t.clientY };
+    if (debug) trace(`start x=${t.clientX.toFixed(0)} y=${t.clientY.toFixed(0)}`);
   };
 
-  // Real devices are unreliable here: some only deliver a couple of move
-  // events (or none) before handing the gesture to native scrolling, and the
-  // first few px of a genuine horizontal swipe often carry enough vertical
-  // noise to misclassify it early. So this only opportunistically claims the
-  // gesture to reduce visible scroll flicker — it never gates the decision.
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onTouchMove = (e: React.TouchEvent) => {
     const g = gesture.current;
-    if (!g) return;
-    const dx = e.clientX - g.startX;
-    const dy = e.clientY - g.startY;
-    if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) e.preventDefault();
+    if (!g || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    g.lastX = t.clientX;
+    g.lastY = t.clientY;
   };
 
-  // The only data actually trustworthy on every device: where the gesture
-  // started vs. where it ended, evaluated once it's over (pointerup) or the
-  // browser claims it for scrolling (pointercancel) — never during the move.
-  const onPointerEnd = (e: React.PointerEvent) => {
+  const onTouchEnd = (e: React.TouchEvent) => {
     const g = gesture.current;
     gesture.current = null;
     if (!g) return;
 
-    const dx = e.clientX - g.startX;
-    const dy = e.clientY - g.startY;
-    if (debug) trace(`${e.type} dx=${dx.toFixed(0)} dy=${dy.toFixed(0)}`);
+    // A cancelled touch can report (0,0), so only trust the final point when
+    // it looks real; otherwise use the last position touchmove reported.
+    const t = e.changedTouches[0];
+    const real = t && !(t.clientX === 0 && t.clientY === 0);
+    const dx = (real ? t.clientX : g.lastX) - g.startX;
+    const dy = (real ? t.clientY : g.lastY) - g.startY;
+    if (debug) trace(`${e.type} dx=${dx.toFixed(0)} dy=${dy.toFixed(0)}${real ? "" : " (last)"}`);
 
     if (Math.abs(dx) < SWIPE_COMMIT) {
       if (debug) trace(`below threshold (${Math.abs(dx).toFixed(0)} < ${SWIPE_COMMIT})`);
@@ -90,10 +92,10 @@ export function MrfDateSwipe({
     <>
       <div
         className={`touch-pan-y${className ? ` ${className}` : ""}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
       >
         {children}
       </div>
