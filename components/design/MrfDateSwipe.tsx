@@ -3,12 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-/** Total movement, in px, before we decide this gesture is horizontal vs. vertical. */
-const LOCK_THRESHOLD = 10;
-/** Horizontal travel, in px, needed to commit to navigating once locked horizontal. */
+/** Horizontal travel, in px, needed to commit to navigating. */
 const SWIPE_COMMIT = 60;
+/** How much dx must dominate dy for a gesture to count as horizontal. */
+const DIRECTION_RATIO = 1.2;
 
-type Gesture = { startX: number; startY: number; locked: "x" | "y" | null };
+type Gesture = { startX: number; startY: number };
 
 export function MrfDateSwipe({
   prevDate,
@@ -38,34 +38,40 @@ export function MrfDateSwipe({
     if (debug) trace(`down type=${e.pointerType} x=${e.clientX.toFixed(0)} y=${e.clientY.toFixed(0)}`);
     if (e.pointerType === "mouse") return;
     if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
-    gesture.current = { startX: e.clientX, startY: e.clientY, locked: null };
+    gesture.current = { startX: e.clientX, startY: e.clientY };
   };
 
+  // Real devices are unreliable here: some only deliver a couple of move
+  // events (or none) before handing the gesture to native scrolling, and the
+  // first few px of a genuine horizontal swipe often carry enough vertical
+  // noise to misclassify it early. So this only opportunistically claims the
+  // gesture to reduce visible scroll flicker — it never gates the decision.
   const onPointerMove = (e: React.PointerEvent) => {
     const g = gesture.current;
+    if (!g) return;
+    const dx = e.clientX - g.startX;
+    const dy = e.clientY - g.startY;
+    if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) e.preventDefault();
+  };
+
+  // The only data actually trustworthy on every device: where the gesture
+  // started vs. where it ended, evaluated once it's over (pointerup) or the
+  // browser claims it for scrolling (pointercancel) — never during the move.
+  const onPointerEnd = (e: React.PointerEvent) => {
+    const g = gesture.current;
+    gesture.current = null;
     if (!g) return;
 
     const dx = e.clientX - g.startX;
     const dy = e.clientY - g.startY;
-
-    if (g.locked === null) {
-      if (Math.abs(dx) < LOCK_THRESHOLD && Math.abs(dy) < LOCK_THRESHOLD) return;
-      g.locked = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      if (debug) trace(`lock=${g.locked} dx=${dx.toFixed(0)} dy=${dy.toFixed(0)}`);
-    }
-
-    if (g.locked === "x") e.preventDefault();
-  };
-
-  const onPointerEnd = (e: React.PointerEvent) => {
-    const g = gesture.current;
-    gesture.current = null;
-    const dx = g ? e.clientX - g.startX : 0;
-    if (debug) trace(`${e.type} locked=${g?.locked ?? "none"} dx=${dx.toFixed(0)}`);
-    if (!g || g.locked !== "x") return;
+    if (debug) trace(`${e.type} dx=${dx.toFixed(0)} dy=${dy.toFixed(0)}`);
 
     if (Math.abs(dx) < SWIPE_COMMIT) {
       if (debug) trace(`below threshold (${Math.abs(dx).toFixed(0)} < ${SWIPE_COMMIT})`);
+      return;
+    }
+    if (Math.abs(dx) < Math.abs(dy) * DIRECTION_RATIO) {
+      if (debug) trace(`too vertical (dx=${dx.toFixed(0)} dy=${dy.toFixed(0)})`);
       return;
     }
 
