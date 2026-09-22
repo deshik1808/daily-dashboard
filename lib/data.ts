@@ -11,6 +11,7 @@
 // ever seeing stale numbers after a save.
 import { cacheLife, cacheTag } from "next/cache";
 import { publicSupabase } from "@/lib/supabase/public";
+import { signMrfPhotoUrls } from "@/lib/supabase/storage";
 
 /** Tag names shared between these readers and the actions that invalidate them. */
 export const TAGS = {
@@ -169,6 +170,33 @@ export async function getAdjacentMrfDates(date: string) {
     prevDate: prevRows?.[0]?.log_date ?? null,
     nextDate: nextRows?.[0]?.log_date ?? null,
   };
+}
+
+/**
+ * Signed URLs for a day's photos, cached well inside their own lifetime.
+ *
+ * Signing per request handed the browser a brand new URL on every visit, so
+ * its image cache could never hit and paging between days re-downloaded every
+ * photo. Caching the signatures keeps each `src` byte-identical between
+ * visits. The lifetime stays far short of `SIGNED_URL_TTL_SECONDS`, so a URL
+ * served from cache always has time left on it, and the TTL itself is
+ * unchanged — these stay as short-lived as they ever were.
+ *
+ * Paths are normalised here rather than inside the cached call: the arguments
+ * are the cache key, so a reordered list would otherwise mint a second copy.
+ */
+export async function getSignedMrfPhotoUrls(paths: string[]) {
+  const unique = Array.from(new Set(paths.filter(Boolean))).sort();
+  if (unique.length === 0) return {};
+  return signedUrlsFor(unique);
+}
+
+async function signedUrlsFor(paths: string[]) {
+  "use cache";
+  cacheLife({ stale: 600, revalidate: 900, expire: 1800 });
+  cacheTag(TAGS.mrfLogs);
+
+  return signMrfPhotoUrls(publicSupabase, paths);
 }
 
 export async function getDocNodes() {

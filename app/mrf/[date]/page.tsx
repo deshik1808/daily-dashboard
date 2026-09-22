@@ -1,15 +1,13 @@
 // app/mrf/[date]/page.tsx
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { isEditor } from "@/lib/auth";
-import { getMrfLogByDate, getAdjacentMrfDates } from "@/lib/data";
+import { getMrfLogByDate, getAdjacentMrfDates, getSignedMrfPhotoUrls } from "@/lib/data";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
 import { Window } from "@/components/design/Window";
 import { FormattedNote } from "@/components/design/FormattedNote";
 import { PhotoGallery } from "@/components/design/PhotoGallery";
-import { signMrfPhotoUrls } from "@/lib/supabase/storage";
 import { formatMrfDate } from "@/lib/mrf-dates";
 import { ReplyButton } from "@/components/design/ReplyButton";
 import { MrfDateSwipe } from "@/components/design/MrfDateSwipe";
@@ -26,19 +24,15 @@ export default async function MrfDatePage({
   const parsed = new Date(date + "T00:00:00Z");
   if (isNaN(parsed.getTime())) notFound();
 
-  // Log and neighbours are cached; the live client is only needed for signing
-  // storage URLs, which expire and so can't be cached with the rows.
-  const [user, log, { prevDate, nextDate }, supabase] = await Promise.all([
+  // All cached except the session check, which is a local token verification.
+  const [user, log, { prevDate, nextDate }] = await Promise.all([
     isEditor(),
     getMrfLogByDate(date),
     getAdjacentMrfDates(date),
-    createClient(),
   ]);
 
   // Sign photo URLs if there's a log.
-  const photoUrls = log
-    ? await signMrfPhotoUrls(supabase, log.photo_paths ?? [])
-    : {};
+  const photoUrls = log ? await getSignedMrfPhotoUrls(log.photo_paths ?? []) : {};
 
   const displayDate = formatMrfDate(date).toUpperCase();
 
