@@ -12,6 +12,7 @@ import { PhotoGallery } from "@/components/design/PhotoGallery";
 import { signMrfPhotoUrls } from "@/lib/supabase/storage";
 import { formatMrfDate } from "@/lib/mrf-dates";
 import { ReplyButton } from "@/components/design/ReplyButton";
+import { MrfDateSwipe } from "@/components/design/MrfDateSwipe";
 
 export default async function MrfDatePage({
   params,
@@ -44,7 +45,11 @@ export default async function MrfDatePage({
   return (
     <div className="flex h-full flex-col">
       <TopBar title={`MRF · ${displayDate}`} backHref="/mrf" />
-      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3">
+      <MrfDateSwipe
+        prevDate={prevDate}
+        nextDate={nextDate}
+        className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3"
+      >
         {log ? (
           <>
             <Window title={displayDate}>
@@ -85,31 +90,7 @@ export default async function MrfDatePage({
             </div>
           </Window>
         )}
-
-        {/* Prev / Next day navigation */}
-        <div className="flex justify-between gap-2">
-          {prevDate ? (
-            <Link
-              href={`/mrf/${prevDate}`}
-              className="flex-1 rounded-control border border-ink py-2.5 text-center font-mono text-[10px] font-bold tracking-wide hover:bg-ink hover:text-paper"
-            >
-              ‹ {formatMrfDate(prevDate).toUpperCase()}
-            </Link>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {nextDate ? (
-            <Link
-              href={`/mrf/${nextDate}`}
-              className="flex-1 rounded-control border border-ink py-2.5 text-center font-mono text-[10px] font-bold tracking-wide hover:bg-ink hover:text-paper"
-            >
-              {formatMrfDate(nextDate).toUpperCase()} ›
-            </Link>
-          ) : (
-            <span className="flex-1" />
-          )}
-        </div>
-      </div>
+      </MrfDateSwipe>
       <BottomNav active="home">
         <ReplyButton
           context={{

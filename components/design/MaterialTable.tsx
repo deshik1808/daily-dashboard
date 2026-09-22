@@ -10,10 +10,12 @@ const PRIMARY = ["Soil", "RDF", "Stones"];
 export function MaterialTable({ rows }: { rows: MaterialRow[] }) {
   const [expanded, setExpanded] = useState(false);
 
+  const HIDDEN = ["Inert", "Others"];
+
   const primaryRows = PRIMARY.map(
     (name) => rows.find((r) => r.material === name) ?? { material: name, disposed_mt: 0, share_pct: 0 }
   );
-  const otherRows = rows.filter((r) => !PRIMARY.includes(r.material));
+  const otherRows = rows.filter((r) => !PRIMARY.includes(r.material) && !HIDDEN.includes(r.material));
   const othersTotal = otherRows.reduce((sum, r) => sum + r.disposed_mt, 0);
   const othersShare = otherRows.reduce((sum, r) => sum + r.share_pct, 0);
 

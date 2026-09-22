@@ -11,6 +11,7 @@ import { MaterialTable, type MaterialRow } from "@/components/design/MaterialTab
 import { ProjectNote } from "@/components/design/ProjectNote";
 import { ReplyButton } from "@/components/design/ReplyButton";
 import { AnimatedNumber } from "@/components/design/AnimatedNumber";
+import { EntryRow } from "@/components/design/EntryRow";
 import { phaseToCode } from "@/lib/phase-codes";
 
 function fmtMT(n: number | null) {
@@ -60,7 +61,12 @@ export default async function PhaseDetailPage({
               { label: "ORDER QTY", numericValue: phase.order_qty_mt, value: fmtMT(phase.order_qty_mt) },
               { label: "CUM. INWARD", numericValue: phase.cumulative_inward_mt, value: fmtMT(phase.cumulative_inward_mt) },
               { label: "CUM. DISPOSED", numericValue: phase.cumulative_disposed_mt, value: fmtMT(phase.cumulative_disposed_mt) },
-              { label: "PROCESSING LOSS", numericValue: phase.balance_mt, value: fmtMT(phase.balance_mt), accent: true },
+              {
+                label: phase.status === "Completed" ? "PROCESSING LOSS" : "BALANCE QTY",
+                numericValue: phase.balance_mt,
+                value: fmtMT(phase.balance_mt),
+                accent: true,
+              },
             ]}
           />
           <div className="mt-2.5 flex items-baseline justify-between border-t border-ink pt-2.5">
@@ -124,58 +130,9 @@ export default async function PhaseDetailPage({
             <p className="font-mono text-xs text-muted">No entries in this range.</p>
           )}
 
-          {(entries ?? []).map((e) => {
-            const disposed =
-              (e.soil_mt ?? 0) +
-              (e.rdf_mt ?? 0) +
-              (e.stones_mt ?? 0) +
-              (e.inert_mt ?? 0) +
-              (e.steel_mt ?? 0) +
-              (e.tyre_mt ?? 0) +
-              (e.wood_mt ?? 0) +
-              (e.glass_mt ?? 0) +
-              (e.iron_scrap_mt ?? 0) +
-              (e.wires_cables_mt ?? 0) +
-              (e.others_mt ?? 0);
-            return (
-              <div
-                key={e.id}
-                className="flex items-center justify-between gap-2 border-b border-sage/70 py-2 last:border-b-0"
-              >
-                <div>
-                  <div className="text-sm font-bold">
-                    {new Date(e.report_date).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      timeZone: "UTC",
-                    })}
-                  </div>
-                  <div className="font-mono text-[10px] text-muted">
-                    {e.shift.toUpperCase()}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right font-mono text-xs">
-                    <div>
-                      IN <AnimatedNumber value={e.inward_mt} decimals={2} />
-                    </div>
-                    <div className="text-muted">
-                      OUT <AnimatedNumber value={disposed} decimals={2} />
-                    </div>
-                  </div>
-                  {isEditor && (
-                    <Link
-                      href={`/entry/${e.id}`}
-                      aria-label={`Edit entry for ${e.report_date}`}
-                      className="min-h-[32px] shrink-0 rounded-control border border-ink px-2 py-1 font-mono text-[10px] font-bold tracking-wide hover:bg-ink hover:text-paper"
-                    >
-                      EDIT
-                    </Link>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {(entries ?? []).map((e) => (
+            <EntryRow key={e.id} entry={e} isEditor={isEditor} />
+          ))}
         </Window>
       </div>
       <BottomNav active="home">
