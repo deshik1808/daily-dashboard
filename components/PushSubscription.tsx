@@ -96,6 +96,12 @@ export function PushSubscription() {
       }
 
       let sub = await registration.pushManager.getSubscription();
+      // A subscription made with an old VAPID key looks valid on the phone but
+      // every push to it is rejected. Replace it if the key has changed.
+      if (sub && !sameKey(sub.options.applicationServerKey, publicKey)) {
+        await sub.unsubscribe();
+        sub = null;
+      }
       if (!sub) {
         sub = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -184,6 +190,13 @@ async function syncSubscription(sub: PushSubscription) {
       keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
     }),
   });
+}
+
+function sameKey(current: ArrayBuffer | null, publicKey: string): boolean {
+  if (!current) return false;
+  const a = new Uint8Array(current);
+  const b = urlBase64ToUint8Array(publicKey);
+  return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {

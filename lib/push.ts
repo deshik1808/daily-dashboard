@@ -49,7 +49,10 @@ export async function sendPushNotification(payload: PushPayload): Promise<void> 
     return;
   }
 
-  if (!subscriptions || subscriptions.length === 0) return;
+  if (!subscriptions || subscriptions.length === 0) {
+    console.warn("[push] No subscribed devices — nothing to send");
+    return;
+  }
 
   const body = JSON.stringify(payload);
 
@@ -66,7 +69,10 @@ export async function sendPushNotification(payload: PushPayload): Promise<void> 
         );
       } catch (err: unknown) {
         const status = (err as { statusCode?: number }).statusCode;
-        if (status === 410 || status === 404) {
+        // 410/404: device unsubscribed. 403: subscription was created with a
+        // different VAPID key and can never succeed — drop it so the device
+        // re-subscribes with the current key next time the app opens.
+        if (status === 410 || status === 404 || status === 403) {
           // Subscription has expired/unsubscribed — remove it.
           await supabase
             .from("push_subscriptions")
@@ -74,7 +80,8 @@ export async function sendPushNotification(payload: PushPayload): Promise<void> 
             .eq("id", sub.id);
           console.info(`[push] Removed stale subscription: ${sub.id}`);
         } else {
-          console.error(`[push] Failed to send to ${sub.id}:`, err);
+          const detail = (err as { body?: string }).body;
+          console.error(`[push] Failed to send to ${sub.id} (status ${status}):`, detail ?? err);
         }
       }
     })
