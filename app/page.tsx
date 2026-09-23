@@ -106,7 +106,7 @@ export default async function Home() {
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar title="PROJECT STATUS" action={<NotificationBell />} />
+      <TopBar title="PROJECT STATUS" action={user ? <NotificationBell /> : undefined} />
       <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3 animate-fade-in">
         <div className="mb-1 font-mono text-xs">
           {user ? (
