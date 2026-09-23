@@ -23,33 +23,53 @@ export interface PushPayload {
   url?: string;
 }
 
+export interface PushResult {
+  /** Subscriptions matched (all devices, or the one `endpoint` asked for). */
+  targeted: number;
+  delivered: number;
+  /** Stale subscriptions (404/410) that were pruned. */
+  removed: number;
+  failed: number;
+  error?: string;
+}
+
 /**
- * Fetches every push subscription from the database and sends `payload` to
- * each one. Stale subscriptions (410 Gone) are pruned automatically.
+ * Fetches push subscriptions from the database and sends `payload` to each
+ * one — or only to `endpoint` when given (used by the per-device test).
+ * Stale subscriptions (410 Gone) are pruned automatically.
  *
- * Safe to fire-and-forget inside `after()` — errors are logged but never
- * re-thrown.
+ * Safe to fire-and-forget inside `after()` — errors are logged and reported
+ * in the result, never re-thrown.
  */
-export async function sendPushNotification(payload: PushPayload): Promise<void> {
+export async function sendPushNotification(
+  payload: PushPayload,
+  { endpoint }: { endpoint?: string } = {}
+): Promise<PushResult> {
+  const result: PushResult = { targeted: 0, delivered: 0, removed: 0, failed: 0 };
+
   const vapid = getVapidConfig();
   if (!vapid) {
     console.warn("[push] VAPID env vars not set — skipping push notification");
-    return;
+    return { ...result, error: "VAPID keys not configured" };
   }
 
   webpush.setVapidDetails(vapid.mailto, vapid.publicKey, vapid.privateKey);
 
   const supabase = createServiceClient();
-  const { data: subscriptions, error } = await supabase
-    .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth");
+  let query = supabase.from("push_subscriptions").select("id, endpoint, p256dh, auth");
+  if (endpoint) query = query.eq("endpoint", endpoint);
+  const { data: subscriptions, error } = await query;
 
   if (error) {
     console.error("[push] Failed to fetch subscriptions:", error);
-    return;
+    return { ...result, error: "Could not read subscriptions" };
   }
 
-  if (!subscriptions || subscriptions.length === 0) return;
+  result.targeted = subscriptions?.length ?? 0;
+  if (!subscriptions || subscriptions.length === 0) {
+    console.info("[push] No subscriptions to notify");
+    return result;
+  }
 
   const body = JSON.stringify(payload);
 
@@ -62,8 +82,11 @@ export async function sendPushNotification(payload: PushPayload): Promise<void> 
             keys: { p256dh: sub.p256dh, auth: sub.auth },
           },
           body,
-          { TTL: 60 * 60 * 24 } // 24 h TTL — deliver even if device is offline
+          // 24 h TTL — deliver even if device is offline; high urgency so
+          // Android doesn't hold it back while the phone is dozing.
+          { TTL: 60 * 60 * 24, urgency: "high" }
         );
+        result.delivered++;
       } catch (err: unknown) {
         const status = (err as { statusCode?: number }).statusCode;
         if (status === 410 || status === 404) {
@@ -72,11 +95,16 @@ export async function sendPushNotification(payload: PushPayload): Promise<void> 
             .from("push_subscriptions")
             .delete()
             .eq("id", sub.id);
+          result.removed++;
           console.info(`[push] Removed stale subscription: ${sub.id}`);
         } else {
+          result.failed++;
           console.error(`[push] Failed to send to ${sub.id}:`, err);
         }
       }
     })
   );
+
+  console.info("[push] Result:", result);
+  return result;
 }

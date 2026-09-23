@@ -7,6 +7,7 @@ import { Window } from "@/components/design/Window";
 import { Chip } from "@/components/design/Chip";
 import { signOut } from "@/app/actions/sign-out";
 import { ReplyButton } from "@/components/design/ReplyButton";
+import { NotificationBell } from "@/components/PushSubscription";
 
 const LOCATION: Record<string, string> = {
   Zigma: "Ramapuram",
@@ -105,7 +106,7 @@ export default async function Home() {
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar title="PROJECT STATUS" />
+      <TopBar title="PROJECT STATUS" action={<NotificationBell />} />
       <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3 animate-fade-in">
         <div className="mb-1 font-mono text-xs">
           {user ? (
