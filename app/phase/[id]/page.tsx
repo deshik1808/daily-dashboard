@@ -13,6 +13,7 @@ import { ReplyButton } from "@/components/design/ReplyButton";
 import { AnimatedNumber } from "@/components/design/AnimatedNumber";
 import { EntryRow } from "@/components/design/EntryRow";
 import { phaseToCode } from "@/lib/phase-codes";
+import { pctOfInward } from "@/lib/phase";
 
 function fmtMT(n: number | null) {
   return (n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -48,6 +49,8 @@ export default async function PhaseDetailPage({
 
   if (!phase) notFound();
 
+  const lossPct = pctOfInward(phase.balance_mt, phase.cumulative_inward_mt);
+
   return (
     <div className="flex h-full flex-col">
       <TopBar
@@ -69,11 +72,23 @@ export default async function PhaseDetailPage({
               },
             ]}
           />
-          <div className="mt-2.5 flex items-baseline justify-between border-t border-ink pt-2.5">
-            <span className="font-mono text-3xl font-bold">
-              <AnimatedNumber value={Math.round(phase.pct_of_order ?? 0)} decimals={0} suffix="%" />
-            </span>
-            <span className="font-mono text-[11px] text-muted">OF ORDER QTY</span>
+          <div className="mt-2.5 grid grid-cols-2 gap-3.5 border-t border-ink pt-2.5">
+            <div>
+              <div className="font-mono text-2xl font-bold">
+                <AnimatedNumber value={Math.round(phase.pct_of_order ?? 0)} decimals={0} suffix="%" />
+              </div>
+              <div className="font-mono text-[10px] tracking-wide text-muted">OF ORDER QTY</div>
+            </div>
+            {lossPct !== null && (
+              <div>
+                <div className="font-mono text-2xl font-bold text-accent-ink">
+                  <AnimatedNumber value={lossPct} decimals={1} suffix="%" />
+                </div>
+                <div className="font-mono text-[10px] tracking-wide text-muted">
+                  {phase.status === "Completed" ? "LOSS OF INWARD" : "BALANCE OF INWARD"}
+                </div>
+              </div>
+            )}
           </div>
           {isEditor && (
             <div className="mt-2.5 flex justify-end border-t border-sage/70 pt-2.5">

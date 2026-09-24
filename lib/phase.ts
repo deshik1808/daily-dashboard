@@ -70,3 +70,10 @@ export function validatePhase(raw: Record<string, unknown>): PhaseValidationResu
     value: { phase, agency, order_qty_mt: qty.ok ? qty.value : 0, status, current_note },
   };
 }
+
+// Balance (or processing loss) as a % of cumulative inward; null when nothing
+// has come in yet, so callers can hide the figure instead of showing 0% or NaN.
+export function pctOfInward(part: number | null, inward: number | null): number | null {
+  if (!inward) return null;
+  return ((part ?? 0) / inward) * 100;
+}

@@ -1,7 +1,7 @@
 // tests/phase.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validatePhase } from "../lib/phase.ts";
+import { validatePhase, pctOfInward } from "../lib/phase.ts";
 
 const BASE = { phase: "III", agency: "Zigma", order_qty_mt: "10", status: "Completed" };
 
@@ -66,4 +66,17 @@ test("validatePhase requires phase and agency to be present", () => {
   assert.equal(result.valid, false);
   assert.equal(result.errors.phase, "Select a phase");
   assert.equal(result.errors.agency, "Select an agency");
+});
+
+test("pctOfInward returns the share of inward", () => {
+  assert.equal(Math.round(pctOfInward(36596.8, 227492.5) * 10) / 10, 16.1);
+});
+
+test("pctOfInward treats a null part as zero", () => {
+  assert.equal(pctOfInward(null, 100), 0);
+});
+
+test("pctOfInward returns null when there is no inward", () => {
+  assert.equal(pctOfInward(10, 0), null);
+  assert.equal(pctOfInward(10, null), null);
 });
