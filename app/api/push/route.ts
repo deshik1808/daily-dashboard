@@ -1,10 +1,23 @@
 // app/api/push/route.ts
-// POST   /api/push  — save a new push subscription
-// DELETE /api/push  — remove a push subscription
-// GET    /api/push/vapid-public-key — return the VAPID public key to clients
+// POST   /api/push  — save a new push subscription (Editor or Viewer)
+// DELETE /api/push  — remove a push subscription (Editor or Viewer)
+// GET    /api/push  — return the VAPID public key to clients (public)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { createClient } from "@/lib/supabase/server";
+import { parseRole } from "@/lib/access";
+
+async function verifyPushAccess() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return false;
+  const { role } = parseRole(user.app_metadata);
+  return role === "editor" || role === "viewer";
+}
 
 export async function GET() {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
@@ -18,6 +31,11 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const isAllowed = await verifyPushAccess();
+  if (!isAllowed) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body?.endpoint || !body?.keys?.p256dh || !body?.keys?.auth) {
     return NextResponse.json({ error: "Invalid subscription object" }, { status: 400 });
@@ -44,6 +62,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const isAllowed = await verifyPushAccess();
+  if (!isAllowed) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body?.endpoint) {
     return NextResponse.json({ error: "Missing endpoint" }, { status: 400 });

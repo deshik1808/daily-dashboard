@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { MATERIAL_FIELDS, SHIFTS, type MaterialKey } from "@/lib/entries";
+import { MATERIAL_FIELDS, shiftsForAgency, type MaterialKey, type Shift } from "@/lib/entries";
 import { createEntry, updateEntry, type EntryFormState } from "@/app/actions/bio-mining-entries";
 import { Window } from "@/components/design/Window";
 import {
@@ -33,6 +33,7 @@ export interface EntryFormValues {
 
 interface EntryFormProps {
   phaseAgencyId: string;
+  agency?: string | null;
   entryId?: string;
   initial?: EntryFormValues;
 }
@@ -43,13 +44,20 @@ function numValue(v: number | string | null | undefined) {
   return v === null || v === undefined ? "" : String(v);
 }
 
-export function EntryForm({ phaseAgencyId, entryId, initial }: EntryFormProps) {
+export function EntryForm({ phaseAgencyId, agency, entryId, initial }: EntryFormProps) {
   const action = entryId
     ? updateEntry.bind(null, entryId, phaseAgencyId)
     : createEntry.bind(null, phaseAgencyId);
 
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
   const errors = state?.errors ?? {};
+
+  const baseShifts = shiftsForAgency(agency);
+  const availableShifts = (
+    initial?.shift && !baseShifts.includes(initial.shift as Shift)
+      ? [...baseShifts, initial.shift]
+      : baseShifts
+  ) as readonly string[];
 
   return (
     <form action={formAction} className="space-y-2.5">
@@ -72,11 +80,11 @@ export function EntryForm({ phaseAgencyId, entryId, initial }: EntryFormProps) {
               id="shift"
               name="shift"
               required
-              defaultValue={initial?.shift ?? "Full day"}
+              defaultValue={initial?.shift ?? availableShifts[0] ?? "Day"}
               disabled={pending}
               className={inputClass}
             >
-              {SHIFTS.map((s) => (
+              {availableShifts.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>

@@ -1,56 +1,62 @@
 // lib/auth.ts
-// Whether the current request carries a valid Editor session.
+// Request-bound session and role lookup.
 import { cache } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { parseRole, type SessionUser } from "@/lib/access";
 
 /**
- * True when the request carries a valid, unexpired Editor session.
+ * Returns the current request's session user with parsed role and agency, or null.
  *
- * Uses `getClaims()` instead of `getUser()`. `getUser()` calls the Supabase
- * Auth server to validate the token, which cost every page an extra network
- * round trip *before* it could even start its own queries. This project signs
- * JWTs with ES256 asymmetric keys (see `/auth/v1/.well-known/jwks.json`), so
- * `getClaims()` verifies the signature locally against JWKS that auth-js caches
- * process-wide — same security property, no round trip.
+ * Uses `getClaims()` instead of `getUser()`. This project signs JWTs with ES256
+ * asymmetric keys, so `getClaims()` verifies the signature locally against JWKS
+ * that auth-js caches process-wide — no network round trip needed for authenticated visits.
+ * If verification fails (e.g. key rotation), it falls back to `getUser()`.
  *
- * Returns a boolean because that is all any caller needs: every page uses this
- * purely to decide whether to show Editor affordances. Authorization itself is
- * enforced by RLS on the database, not by this check.
- *
- * Memoized per request with `cache()` so a page and its nested components can
- * each ask without re-verifying.
+ * Memoized per request with `cache()` so nested server components can share it.
  */
-export const isEditor = cache(async (): Promise<boolean> => {
+export const getSession = cache(async (): Promise<SessionUser | null> => {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.getClaims();
 
     if (data && typeof data.claims?.sub === "string" && data.claims.sub.length > 0) {
-      return true;
+      const { role, agency } = parseRole(
+        data.claims.app_metadata as Record<string, unknown> | undefined
+      );
+      return {
+        userId: data.claims.sub,
+        role,
+        agency,
+      };
     }
 
-    // `error` set means verification failed, not that the visitor is signed
-    // out (that case returns both `data` and `error` as null). Fall back to the
-    // network check so a JWKS problem degrades to the old cost rather than
-    // silently hiding the Editor's own controls from them.
     if (error) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      return !!user;
+      if (user) {
+        const { role, agency } = parseRole(user.app_metadata);
+        return {
+          userId: user.id,
+          role,
+          agency,
+        };
+      }
     }
 
-    return false;
+    return null;
   } catch (err) {
-    // Under Cache Components, `cookies()` rejects once a prerender completes —
-    // that rejection is how React marks this subtree as a request-time hole.
-    // Catching it would bake "signed out" into the static shell, so hand every
-    // framework-internal error (this, `notFound()`, `redirect()`) straight back.
     unstable_rethrow(err);
-
-    // A genuinely malformed token means "not an Editor", never a crash.
-    console.warn("Editor session check failed:", err);
-    return false;
+    console.warn("Session check failed:", err);
+    return null;
   }
+});
+
+/**
+ * True when the request carries an Editor session.
+ */
+export const isEditor = cache(async (): Promise<boolean> => {
+  const session = await getSession();
+  return session?.role === "editor";
 });

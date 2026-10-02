@@ -1,5 +1,5 @@
 // components/design/Window.tsx
-export function Window({ title, children }: { title: string; children: React.ReactNode }) {
+export function Window({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="overflow-hidden rounded-window border border-ink/85 bg-paper">
       <div className="flex items-center gap-2 border-b border-ink/85 bg-mist px-2.5 py-1.5 font-mono text-xs font-bold tracking-wide">

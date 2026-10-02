@@ -1,12 +1,12 @@
-// app/entry/new/page.tsx
+// app/runtime/new/page.tsx
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { canWriteAgency } from "@/lib/access";
 import { TopBar } from "@/components/design/TopBar";
-import { EntryForm } from "@/components/design/EntryForm";
+import { RuntimeForm } from "@/components/design/RuntimeForm";
 
-export default async function NewEntryPage({
+export default async function NewRuntimePage({
   searchParams,
 }: {
   searchParams: Promise<{ phase?: string }>;
@@ -34,11 +34,11 @@ export default async function NewEntryPage({
   return (
     <div className="flex h-full flex-col">
       <TopBar
-        title={`NEW ENTRY${phase ? ` · PHASE ${phase.phase}` : ""}`}
+        title={`LOG RUNTIME · ${phase.agency.toUpperCase()}`}
         backHref={`/phase/${phaseAgencyId}`}
       />
       <div className="flex-1 overflow-y-auto bg-canvas p-3">
-        <EntryForm phaseAgencyId={phaseAgencyId} agency={phase.agency} />
+        <RuntimeForm phaseAgencyId={phaseAgencyId} />
       </div>
     </div>
   );

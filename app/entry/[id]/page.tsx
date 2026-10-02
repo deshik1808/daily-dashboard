@@ -1,48 +1,63 @@
 // app/entry/[id]/page.tsx
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { canEditRecord } from "@/lib/access";
 import { TopBar } from "@/components/design/TopBar";
 import { Window } from "@/components/design/Window";
 import { EntryForm } from "@/components/design/EntryForm";
 import { DeleteConfirm } from "@/components/design/DeleteConfirm";
 import { deleteEntry } from "@/app/actions/bio-mining-entries";
 
-export default async function EditEntryPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditEntryPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await getSession();
+  if (!session) redirect("/login");
 
+  const supabase = await createClient();
   const { data: entry, error } = await supabase
     .from("bio_mining_entries")
-    .select("*")
+    .select("*, phase_master(agency, phase)")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
 
   if (error) console.error("bio_mining_entries lookup failed", error);
-  if (!entry) notFound();
+  if (!entry) {
+    redirect("/");
+  }
 
-  const { data: phase } = await supabase
-    .from("phase_master")
-    .select("phase")
-    .eq("id", entry.phase_agency_id)
-    .maybeSingle();
+  const phaseInfo = entry.phase_master as { agency: string; phase: string } | null;
+  const phaseAgency = phaseInfo?.agency ?? "";
+  const phaseNumber = phaseInfo?.phase ?? "";
+
+  // If operator visits row from another agency -> redirect to /
+  if (session.role === "operator" && session.agency !== phaseAgency) {
+    redirect("/");
+  }
+
+  // If operator visits row he didn't create -> redirect to row's phase page
+  if (!canEditRecord(session, { agency: phaseAgency, created_by: entry.created_by })) {
+    redirect(`/phase/${entry.phase_agency_id}`);
+  }
 
   const boundDelete = deleteEntry.bind(null, id, entry.phase_agency_id);
 
   return (
     <div className="flex h-full flex-col">
       <TopBar
-        title={`EDIT ENTRY${phase ? ` · PHASE ${phase.phase}` : ""}`}
+        title={`EDIT ENTRY${phaseNumber ? ` · PHASE ${phaseNumber}` : ""}`}
         backHref={`/phase/${entry.phase_agency_id}`}
       />
       <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3">
         <EntryForm
           phaseAgencyId={entry.phase_agency_id}
+          agency={phaseAgency}
           entryId={id}
           initial={{
             report_date: entry.report_date,

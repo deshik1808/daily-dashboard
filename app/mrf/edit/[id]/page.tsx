@@ -1,5 +1,6 @@
 // app/mrf/edit/[id]/page.tsx
 import { notFound, redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TopBar } from "@/components/design/TopBar";
 import { Window } from "@/components/design/Window";
@@ -10,12 +11,11 @@ import { deleteMrfLog } from "@/app/actions/mrf-logs";
 export default async function EditMrfLogPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (session.role !== "editor") redirect("/");
 
+  const supabase = await createClient();
   const { data: log, error } = await supabase
     .from("mrf_logs")
     .select("id, log_date, note, photo_paths")

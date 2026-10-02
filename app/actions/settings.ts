@@ -4,6 +4,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath, updateTag } from "next/cache";
 import { TAGS } from "@/lib/data";
+import { parseRole } from "@/lib/access";
 
 const DEFAULT_PHONE = process.env.REPLY_WHATSAPP_NUMBER || "910000000000";
 
@@ -45,6 +46,11 @@ export async function updateReplyWhatsAppNumber(rawNumber: string): Promise<{
   } = await supabase.auth.getUser();
 
   if (!user) {
+    return { success: false, error: "You're signed out. Sign in again to save." };
+  }
+
+  const { role } = parseRole(user.app_metadata);
+  if (role !== "editor") {
     return { success: false, error: "You must be signed in as an Editor to change settings." };
   }
 

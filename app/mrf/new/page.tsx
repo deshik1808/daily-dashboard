@@ -1,15 +1,13 @@
 // app/mrf/new/page.tsx
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getSession } from "@/lib/auth";
 import { TopBar } from "@/components/design/TopBar";
 import { MrfLogForm } from "@/components/design/MrfLogForm";
 
 export default async function NewMrfLogPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (session.role !== "editor") redirect("/");
 
   return (
     <div className="flex h-full flex-col">

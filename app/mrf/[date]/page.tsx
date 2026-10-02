@@ -1,7 +1,6 @@
-// app/mrf/[date]/page.tsx
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { isEditor } from "@/lib/auth";
+import { notFound, redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { getMrfLogByDate, getAdjacentMrfDates, getSignedMrfPhotoUrls } from "@/lib/data";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
@@ -24,9 +23,14 @@ export default async function MrfDatePage({
   const parsed = new Date(date + "T00:00:00Z");
   if (isNaN(parsed.getTime())) notFound();
 
+  const session = await getSession();
+  if (session?.role === "operator") {
+    redirect("/");
+  }
+  const isEditorUser = session?.role === "editor";
+
   // All cached except the session check, which is a local token verification.
-  const [user, log, { prevDate, nextDate }] = await Promise.all([
-    isEditor(),
+  const [log, { prevDate, nextDate }] = await Promise.all([
     getMrfLogByDate(date),
     getAdjacentMrfDates(date),
   ]);
@@ -52,7 +56,7 @@ export default async function MrfDatePage({
                   .filter((path) => photoUrls[path])
                   .map((path) => ({ path, url: photoUrls[path] }))}
               />
-              {user && (
+              {isEditorUser && (
                 <div className="mt-2.5 flex justify-end border-t border-sage/70 pt-2.5">
                   <Link
                     href={`/mrf/edit/${log.id}`}
@@ -85,13 +89,13 @@ export default async function MrfDatePage({
           </Window>
         )}
       </MrfDateSwipe>
-      <BottomNav active="home">
+      <BottomNav active="home" isOperator={false}>
         <ReplyButton
           context={{
             label: `MRF Plant · ${formatMrfDate(date)}`,
             path: `/mrf/${date}`,
           }}
-          isEditor={user}
+          role={session?.role}
         />
       </BottomNav>
     </div>

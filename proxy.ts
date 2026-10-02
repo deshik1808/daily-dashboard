@@ -1,9 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-
-const EDITOR_ONLY_PREFIXES = ["/entry", "/mrf/new", "/mrf/edit"];
-// /phase/<id>/edit sits under an otherwise public prefix, so it needs its own match.
-const EDITOR_ONLY_PATTERNS = [/^\/phase\/[^/]+\/edit\/?$/];
+import { decideAccess, parseRole, type SessionUser } from "@/lib/access";
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -27,40 +24,41 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // `getClaims()` rather than `getUser()`. This proxy matches every non-static
-  // request, so `getUser()` put a round trip to the Supabase Auth server in
-  // front of *every* navigation for anyone with a session — i.e. the Editor,
-  // on every single click, before the page even began rendering.
-  //
-  // `getClaims()` still calls `getSession()` internally, so an expired token is
-  // refreshed and the refreshed cookies still flow through `setAll` above. The
-  // difference is verification: this project signs with ES256, so the signature
-  // is checked locally against the JWKS, which auth-js caches process-wide
-  // (`GLOBAL_JWKS`, 10-minute TTL) rather than per client instance. If the JWKS
-  // can't be used, auth-js falls back to `getUser()` on its own.
-  // A verification failure (`error` set) is not the same as "signed out"
-  // (`data` and `error` both null). Only the former falls back to the network
-  // check — so a JWKS hiccup can cost a round trip but can never lock a
-  // legitimately signed-in Editor out of their own edit pages.
   const { data: claims, error: claimsError } = await supabase.auth.getClaims();
 
-  let isSignedIn = typeof claims?.claims?.sub === "string";
+  let session: SessionUser | null = null;
 
-  if (!isSignedIn && claimsError) {
+  if (claims && typeof claims.claims?.sub === "string" && claims.claims.sub.length > 0) {
+    const { role, agency } = parseRole(
+      claims.claims.app_metadata as Record<string, unknown> | undefined
+    );
+    session = {
+      userId: claims.claims.sub,
+      role,
+      agency,
+    };
+  } else if (claimsError) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    isSignedIn = !!user;
+    if (user) {
+      const { role, agency } = parseRole(user.app_metadata);
+      session = {
+        userId: user.id,
+        role,
+        agency,
+      };
+    }
   }
 
-  const { pathname } = request.nextUrl;
-  const isEditorOnlyPath =
-    EDITOR_ONLY_PREFIXES.some((p) => pathname.startsWith(p)) ||
-    EDITOR_ONLY_PATTERNS.some((re) => re.test(pathname));
+  const { pathname, search } = request.nextUrl;
+  const decision = decideAccess(pathname, search, session);
 
-  if (isEditorOnlyPath && !isSignedIn) {
+  if (!decision.allow) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    const [redirectPath, redirectSearch] = decision.redirect.split("?");
+    url.pathname = redirectPath;
+    url.search = redirectSearch ? `?${redirectSearch}` : "";
     return NextResponse.redirect(url);
   }
 
@@ -68,5 +66,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons|manifest.json).*)"],
+  matcher: ["/((?!_next/static|_next/image|.*\\.[a-zA-Z0-9]+$).*)"],
 };

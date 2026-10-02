@@ -1,17 +1,17 @@
 // lib/data.ts
-// Cached reads of the dashboard's publicly-visible data.
+// Cached reads of the dashboard's data.
 //
-// Every function here is a `use cache` scope over the cookie-free client, so
+// Every function here is a `use cache` scope over the reader client, so
 // its result is shared by all viewers and can be prerendered into a route's
 // static shell instead of being re-fetched on every visit.
 //
-// Freshness comes from tags, not short lifetimes: the Editor's save actions
-// call `revalidateTag` for whatever they touched, which also clears the client
-// router cache immediately. That lets the lifetimes be generous without anyone
-// ever seeing stale numbers after a save.
+// Freshness comes from tags, not short lifetimes: save actions call `revalidateTag`
+// for whatever they touched, which also clears the client router cache immediately.
+// That lets the lifetimes be generous without anyone ever seeing stale numbers after a save.
 import { cacheLife, cacheTag } from "next/cache";
-import { publicSupabase } from "@/lib/supabase/public";
+import { readerSupabase } from "@/lib/supabase/reader";
 import { signMrfPhotoUrls } from "@/lib/supabase/storage";
+import type { ScreenRuntimeLog } from "@/lib/runtime";
 
 /** Tag names shared between these readers and the actions that invalidate them. */
 export const TAGS = {
@@ -21,6 +21,7 @@ export const TAGS = {
   entries: "bio-mining-entries",
   settings: "app-settings",
   shortLinks: "short-links",
+  runtime: "screen-runtime-logs",
 } as const;
 
 export async function getPhaseTotals() {
@@ -28,7 +29,7 @@ export async function getPhaseTotals() {
   cacheLife("hours");
   cacheTag(TAGS.phases);
 
-  const { data, error } = await publicSupabase
+  const { data, error } = await readerSupabase
     .from("phase_totals")
     .select("phase_agency_id, phase, agency, status, pct_of_order, last_report_date")
     .order("phase", { ascending: true });
@@ -42,7 +43,7 @@ export async function getPhaseById(id: string) {
   cacheLife("hours");
   cacheTag(TAGS.phases);
 
-  const { data, error } = await publicSupabase
+  const { data, error } = await readerSupabase
     .from("phase_totals")
     .select("*")
     .eq("phase_agency_id", id)
@@ -57,7 +58,7 @@ export async function getPhaseMaterials(id: string) {
   cacheLife("hours");
   cacheTag(TAGS.entries);
 
-  const { data, error } = await publicSupabase
+  const { data, error } = await readerSupabase
     .from("phase_material_breakdown")
     .select("material, disposed_mt, share_pct")
     .eq("phase_agency_id", id);
@@ -78,10 +79,10 @@ export async function getPhaseEntries(id: string, since: string | null) {
   cacheLife("hours");
   cacheTag(TAGS.entries);
 
-  let query = publicSupabase
+  let query = readerSupabase
     .from("bio_mining_entries")
     .select(
-      "id, report_date, shift, inward_mt, soil_mt, rdf_mt, stones_mt, inert_mt, steel_mt, tyre_mt, wood_mt, glass_mt, iron_scrap_mt, wires_cables_mt, others_mt"
+      "id, report_date, shift, inward_mt, soil_mt, rdf_mt, stones_mt, inert_mt, steel_mt, tyre_mt, wood_mt, glass_mt, iron_scrap_mt, wires_cables_mt, others_mt, created_by"
     )
     .eq("phase_agency_id", id)
     .is("deleted_at", null)
@@ -94,12 +95,50 @@ export async function getPhaseEntries(id: string, since: string | null) {
   return data ?? [];
 }
 
+/**
+ * Screen runtime logs for a phase, optionally windowed to recent history.
+ * Sorted newest first: by date descending, and Night before Day within a date.
+ */
+export async function getRuntimeLogs(
+  phaseId: string,
+  since: string | null
+): Promise<ScreenRuntimeLog[]> {
+  "use cache";
+  cacheLife("hours");
+  cacheTag(TAGS.runtime);
+
+  let query = readerSupabase
+    .from("screen_runtime_logs")
+    .select(
+      "id, phase_agency_id, log_date, shift, red_runtime_min, red_breakdown_min, red_breakdown_reasons, yellow_runtime_min, yellow_breakdown_min, yellow_breakdown_reasons, created_by"
+    )
+    .eq("phase_agency_id", phaseId)
+    .is("deleted_at", null)
+    .order("log_date", { ascending: false });
+
+  if (since) query = query.gte("log_date", since);
+
+  const { data, error } = await query;
+  if (error) console.error("screen_runtime_logs query failed:", error.message);
+
+  const rows = (data ?? []).slice();
+  rows.sort((a, b) => {
+    if (a.log_date !== b.log_date) {
+      return b.log_date.localeCompare(a.log_date);
+    }
+    if (a.shift === b.shift) return 0;
+    return a.shift === "Night" ? -1 : 1;
+  });
+
+  return rows as unknown as ScreenRuntimeLog[];
+}
+
 export async function getLatestMrfLogDate() {
   "use cache";
   cacheLife("hours");
   cacheTag(TAGS.mrfLogs);
 
-  const { data, error } = await publicSupabase
+  const { data, error } = await readerSupabase
     .from("mrf_logs")
     .select("log_date")
     .is("deleted_at", null)
@@ -116,7 +155,7 @@ export async function getMrfLogs(limit = 30) {
   cacheLife("hours");
   cacheTag(TAGS.mrfLogs);
 
-  const { data, error } = await publicSupabase
+  const { data, error } = await readerSupabase
     .from("mrf_logs")
     .select("id, log_date, note, photo_paths")
     .is("deleted_at", null)
@@ -132,7 +171,7 @@ export async function getMrfLogByDate(date: string) {
   cacheLife("hours");
   cacheTag(TAGS.mrfLogs);
 
-  const { data, error } = await publicSupabase
+  const { data, error } = await readerSupabase
     .from("mrf_logs")
     .select("id, log_date, note, photo_paths")
     .is("deleted_at", null)
@@ -150,14 +189,14 @@ export async function getAdjacentMrfDates(date: string) {
   cacheTag(TAGS.mrfLogs);
 
   const [{ data: prevRows }, { data: nextRows }] = await Promise.all([
-    publicSupabase
+    readerSupabase
       .from("mrf_logs")
       .select("log_date")
       .is("deleted_at", null)
       .lt("log_date", date)
       .order("log_date", { ascending: false })
       .limit(1),
-    publicSupabase
+    readerSupabase
       .from("mrf_logs")
       .select("log_date")
       .is("deleted_at", null)
@@ -174,16 +213,6 @@ export async function getAdjacentMrfDates(date: string) {
 
 /**
  * Signed URLs for a day's photos, cached well inside their own lifetime.
- *
- * Signing per request handed the browser a brand new URL on every visit, so
- * its image cache could never hit and paging between days re-downloaded every
- * photo. Caching the signatures keeps each `src` byte-identical between
- * visits. The lifetime stays far short of `SIGNED_URL_TTL_SECONDS`, so a URL
- * served from cache always has time left on it, and the TTL itself is
- * unchanged — these stay as short-lived as they ever were.
- *
- * Paths are normalised here rather than inside the cached call: the arguments
- * are the cache key, so a reordered list would otherwise mint a second copy.
  */
 export async function getSignedMrfPhotoUrls(paths: string[]) {
   const unique = Array.from(new Set(paths.filter(Boolean))).sort();
@@ -196,7 +225,7 @@ async function signedUrlsFor(paths: string[]) {
   cacheLife({ stale: 600, revalidate: 900, expire: 1800 });
   cacheTag(TAGS.mrfLogs);
 
-  return signMrfPhotoUrls(publicSupabase, paths);
+  return signMrfPhotoUrls(readerSupabase, paths);
 }
 
 export async function getDocNodes() {
@@ -204,7 +233,7 @@ export async function getDocNodes() {
   cacheLife("hours");
   cacheTag(TAGS.docNodes);
 
-  const { data, error } = await publicSupabase
+  const { data, error } = await readerSupabase
     .from("doc_nodes")
     .select("id, parent_id, kind, title, url, created_by, created_at, updated_at");
 
@@ -214,17 +243,13 @@ export async function getDocNodes() {
 
 /**
  * The WhatsApp number the reply pill deep-links to.
- *
- * Stored in `app_settings` but changed roughly never, so it is cached hard and
- * invalidated explicitly by `updateReplyWhatsAppNumber`. Falls back to the env
- * var and then a placeholder, matching the previous behaviour.
  */
 export async function getReplyNumber(): Promise<string> {
   "use cache";
   cacheLife("days");
   cacheTag(TAGS.settings);
 
-  const { data } = await publicSupabase
+  const { data } = await readerSupabase
     .from("app_settings")
     .select("value")
     .eq("key", "reply_whatsapp_number")
@@ -238,21 +263,13 @@ export async function getReplyNumber(): Promise<string> {
 
 /**
  * The minted short URL for a path, if one has been cached in `short_links`.
- *
- * A row here is effectively immutable once written — a path keeps its is.gd
- * link — but minting happens inside an `after()` callback, which is not a
- * Server Action and so cannot call `updateTag`. A long lifetime would
- * therefore hide a freshly minted link for as long as it lasted. `minutes`
- * still removes the round trip from virtually every request while letting a
- * new link surface within one; until it does, the caller falls back to the
- * full `origin + path` URL, which works, just isn't short.
  */
 export async function getShortLink(canonicalPath: string): Promise<string | null> {
   "use cache";
   cacheLife("minutes");
   cacheTag(TAGS.shortLinks);
 
-  const { data } = await publicSupabase
+  const { data } = await readerSupabase
     .from("short_links")
     .select("short_url")
     .eq("path", canonicalPath)

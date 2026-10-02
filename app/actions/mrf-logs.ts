@@ -1,4 +1,4 @@
-﻿// app/actions/mrf-logs.ts
+// app/actions/mrf-logs.ts
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { validateMrfLog } from "@/lib/mrf";
 import { getOrCreateShortLink } from "@/lib/short-links";
 import { sendPushNotification } from "@/lib/push";
+import { parseRole } from "@/lib/access";
 
 export interface MrfFormState {
   errors?: Record<string, string>;
@@ -17,6 +18,7 @@ export interface MrfFormState {
 
 const UNIQUE_VIOLATION = "23505";
 const DUPLICATE_MESSAGE = "A log already exists for that date. Edit the existing log instead.";
+const PERMISSION_MESSAGE = "You don't have permission to change this record.";
 
 function utcToday() {
   return new Date().toISOString().slice(0, 10);
@@ -26,20 +28,10 @@ function readMrfForm(formData: FormData): Record<string, unknown> {
   return {
     log_date: formData.get("log_date"),
     note: formData.get("note"),
-    // The uploader posts one hidden input per already-uploaded object key.
     photo_paths: formData.getAll("photo_paths"),
   };
 }
 
-/**
- * Mints and caches the short link for a log's date page.
- *
- * Runs via `after` so the is.gd round-trip never delays the Editor's save, and
- * so a shortener outage can never fail it: `getOrCreateShortLink` returns null
- * on timeout or a bad response, and the Reply button falls back to /m/YYMMDD.
- * Only the Editor reaches this path, which is what the short_links insert
- * policy requires.
- */
 function scheduleShortLink(logDate: string) {
   after(async () => {
     try {
@@ -56,15 +48,21 @@ async function requireEditor() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return { supabase, user };
+
+  if (!user) return { supabase, user: null, error: "You're signed out. Sign in again to save." };
+
+  const { role } = parseRole(user.app_metadata);
+  if (role !== "editor") return { supabase, user: null, error: PERMISSION_MESSAGE };
+
+  return { supabase, user, error: null };
 }
 
 export async function createMrfLog(
   _prevState: MrfFormState,
   formData: FormData
 ): Promise<MrfFormState> {
-  const { supabase, user } = await requireEditor();
-  if (!user) return { error: "Unauthorized: editor login required" };
+  const { supabase, user, error: authError } = await requireEditor();
+  if (!user) return { error: authError ?? PERMISSION_MESSAGE };
 
   const validation = validateMrfLog(readMrfForm(formData), utcToday());
   if (!validation.valid || !validation.value) return { errors: validation.errors };
@@ -85,7 +83,6 @@ export async function createMrfLog(
   updateTag(TAGS.mrfLogs);
   scheduleShortLink(validation.value.log_date);
 
-  // Fire push notification after the response --- never blocks the Editor.
   const logDate = validation.value.log_date;
   after(async () => {
     await sendPushNotification({
@@ -103,8 +100,8 @@ export async function updateMrfLog(
   _prevState: MrfFormState,
   formData: FormData
 ): Promise<MrfFormState> {
-  const { supabase, user } = await requireEditor();
-  if (!user) return { error: "Unauthorized: editor login required" };
+  const { supabase, user, error: authError } = await requireEditor();
+  if (!user) return { error: authError ?? PERMISSION_MESSAGE };
 
   const validation = validateMrfLog(readMrfForm(formData), utcToday());
   if (!validation.valid || !validation.value) return { errors: validation.errors };
@@ -130,8 +127,8 @@ export async function updateMrfLog(
 }
 
 export async function deleteMrfLog(logId: string): Promise<MrfFormState> {
-  const { supabase, user } = await requireEditor();
-  if (!user) return { error: "Unauthorized: editor login required" };
+  const { supabase, user, error: authError } = await requireEditor();
+  if (!user) return { error: authError ?? PERMISSION_MESSAGE };
 
   const { error } = await supabase
     .from("mrf_logs")

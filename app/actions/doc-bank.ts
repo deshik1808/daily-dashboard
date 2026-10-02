@@ -4,10 +4,39 @@
 import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { TAGS } from "@/lib/data";
+import { parseRole } from "@/lib/access";
 
 export interface DocActionResult {
   success: boolean;
   error?: string;
+}
+
+const PERMISSION_MESSAGE = "You don't have permission to change this record.";
+
+async function requireEditor() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      supabase,
+      user: null,
+      error: "You're signed out. Log in again to make changes.",
+    };
+  }
+
+  const { role } = parseRole(user.app_metadata);
+  if (role !== "editor") {
+    return {
+      supabase,
+      user: null,
+      error: PERMISSION_MESSAGE,
+    };
+  }
+
+  return { supabase, user, error: null };
 }
 
 function mapDatabaseError(error: { code?: string; message?: string }): string {
@@ -29,15 +58,11 @@ export async function createNode(
   title: string,
   url?: string | null
 ): Promise<DocActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { supabase, user, error: authError } = await requireEditor();
   if (!user) {
     return {
       success: false,
-      error: "You're signed out. Log in again to make changes.",
+      error: authError ?? PERMISSION_MESSAGE,
     };
   }
 
@@ -132,15 +157,11 @@ export async function renameNode(
   title: string,
   url?: string | null
 ): Promise<DocActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { supabase, user, error: authError } = await requireEditor();
   if (!user) {
     return {
       success: false,
-      error: "You're signed out. Log in again to make changes.",
+      error: authError ?? PERMISSION_MESSAGE,
     };
   }
 
@@ -207,15 +228,11 @@ export async function renameNode(
 }
 
 export async function deleteNode(id: string): Promise<DocActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { supabase, user, error: authError } = await requireEditor();
   if (!user) {
     return {
       success: false,
-      error: "You're signed out. Log in again to make changes.",
+      error: authError ?? PERMISSION_MESSAGE,
     };
   }
 

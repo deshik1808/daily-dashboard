@@ -3,7 +3,7 @@
 // Code format: <arabic phase number><agency first letter lowercase>
 
 import { redirect } from "next/navigation";
-import { publicSupabase } from "@/lib/supabase/public";
+import { readerSupabase } from "@/lib/supabase/reader";
 
 export async function GET(
   _request: Request,
@@ -27,7 +27,7 @@ export async function GET(
     redirect("/");
   }
 
-  const { data } = await publicSupabase
+  const { data } = await readerSupabase
     .from("phase_master")
     .select("id")
     .eq("phase", roman)

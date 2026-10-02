@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     ".worktrees/**",
     "public/sw.js",
     "public/workbox-*.js",
+    "public/worker-*.js",
   ]),
 ]);
 

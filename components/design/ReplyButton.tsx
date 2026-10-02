@@ -1,14 +1,11 @@
 // components/design/ReplyButton.tsx
 // Floating REPLY pill that opens WhatsApp with the current page quoted.
-// Server-rendered — no client JS. Hidden when the Editor is signed in or
-// when REPLY_WHATSAPP_NUMBER is unset.
+// Server-rendered — no client JS. Shown to the Viewer only (or Editor in dev).
+// Hidden when signed out or for Operator.
 //
 // Renders as a child of <BottomNav>, which is its positioning context: the pill
 // sits `bottom-full` (the nav's own top edge) plus a margin, so the clearance
-// holds at whatever height the nav takes. It used to be `fixed bottom-20`, a
-// guess at the nav's height measured against the *viewport* instead — on any
-// device reporting a safe-area inset the nav grew past 80px and the two
-// touched.
+// holds at whatever height the nav takes.
 
 import { Suspense } from "react";
 import { after } from "next/server";
@@ -17,6 +14,7 @@ import { getOrCreateShortLink, buildFallbackUrl } from "@/lib/short-links";
 import { getAppOrigin } from "@/lib/app-origin";
 import { createClient } from "@/lib/supabase/server";
 import { getReplyNumber, getShortLink } from "@/lib/data";
+import type { AppRole } from "@/lib/access";
 
 /**
  * Resolves the best available link URL for the reply message.
@@ -44,12 +42,7 @@ async function resolveLink(context: ReplyContext): Promise<string> {
 
 /**
  * Warms the short-link cache for a path the Editor is viewing.
- *
- * Only the Editor may write to `short_links`, and the pill is hidden from the
- * Editor in production — so without this, paths outside the MRF save flow
- * (Home, phase pages, Doc Bank) never get a row and every Viewer falls back to
- * the full `origin + path` URL. Runs via `after()` so the page still streams
- * immediately and an is.gd outage can never delay a render.
+ * Only the Editor may write to `short_links`.
  */
 function scheduleShortLink(path: string) {
   after(async () => {
@@ -62,19 +55,11 @@ function scheduleShortLink(path: string) {
   });
 }
 
-/**
- * Streams the pill in rather than holding the page back.
- *
- * The pill needs two Supabase reads (the configured number, then the cached
- * short link) and it renders at the very bottom of every page. Awaited inline,
- * those reads sat on the critical path: nothing — not the top bar, not the
- * cards — reached the browser until the WhatsApp link was resolved. Behind a
- * Suspense boundary the page ships immediately and the pill fills in after.
- *
- * The fallback is `null` on purpose: the pill is a secondary affordance, so
- * appearing a beat late is better than reserving a visible empty slot for it.
- */
-export function ReplyButton(props: { context: ReplyContext; isEditor: boolean }) {
+export function ReplyButton(props: {
+  context: ReplyContext;
+  isEditor?: boolean;
+  role?: AppRole | null;
+}) {
   return (
     <Suspense fallback={null}>
       <ReplyPill {...props} />
@@ -85,22 +70,27 @@ export function ReplyButton(props: { context: ReplyContext; isEditor: boolean })
 async function ReplyPill({
   context,
   isEditor,
+  role,
 }: {
   context: ReplyContext;
-  isEditor: boolean;
+  isEditor?: boolean;
+  role?: AppRole | null;
 }) {
   const isDev = process.env.NODE_ENV === "development";
+  const userRole = role !== undefined ? role : isEditor ? "editor" : "viewer";
 
-  // The Editor is the only role allowed to mint, so warm the cache on their
-  // visit — including when the pill itself is about to be hidden below.
-  if (isEditor) {
+  // The Editor is the only role allowed to mint, so warm the cache on their visit
+  if (userRole === "editor") {
     scheduleShortLink(context.path);
   }
 
-  // In production, don't render if the user is an Editor.
-  // In development, allow rendering so the icon and layout can be tested.
-  // Checked before any await, so a signed-in Editor pays for neither read.
-  if (!isDev && isEditor) {
+  // Operator and unauthenticated users never see the reply pill
+  if (userRole === "operator" || userRole === null) {
+    return null;
+  }
+
+  // In production, Editor never sees the reply pill
+  if (!isDev && userRole === "editor") {
     return null;
   }
 
@@ -120,9 +110,18 @@ async function ReplyPill({
       className="absolute bottom-full right-4 z-40 mb-8 flex items-center gap-1.5 rounded-full border border-ink bg-paper px-3.5 py-2 font-mono text-xs font-bold tracking-wide shadow-md transition-colors hover:bg-ink hover:text-paper sm:right-6 sm:mb-12"
       aria-label={`Reply about ${context.label} via WhatsApp`}
     >
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
-           stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-           strokeLinejoin="round" aria-hidden className="shrink-0">
+      <svg
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+        className="shrink-0"
+      >
         <path d="M9 14 4 9l5-5" />
         <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
       </svg>

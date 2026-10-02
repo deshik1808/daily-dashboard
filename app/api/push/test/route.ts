@@ -3,8 +3,24 @@
 // device only and reports whether the push service accepted it.
 import { NextRequest, NextResponse } from "next/server";
 import { sendPushNotification } from "@/lib/push";
+import { createClient } from "@/lib/supabase/server";
+import { parseRole } from "@/lib/access";
 
 export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { role } = parseRole(user.app_metadata);
+  if (role !== "editor" && role !== "viewer") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body?.endpoint) {
     return NextResponse.json({ error: "Missing endpoint" }, { status: 400 });

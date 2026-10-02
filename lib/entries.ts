@@ -5,6 +5,14 @@
 export const SHIFTS = ["Day", "Night", "Full day"] as const;
 export type Shift = (typeof SHIFTS)[number];
 
+/** Shifts permitted for an agency. Card Box works only Day and Night. */
+export function shiftsForAgency(agency?: string | null): readonly Shift[] {
+  if (agency === "Card Box") {
+    return ["Day", "Night"] as const;
+  }
+  return SHIFTS;
+}
+
 /** The 11 disposed-material columns, in the order they appear on the form. */
 export const MATERIAL_FIELDS = [
   { key: "soil_mt", label: "SOIL" },

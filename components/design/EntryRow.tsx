@@ -29,7 +29,16 @@ export type EntryRowData = {
   inward_mt: number;
 } & Record<MaterialKey, number | null>;
 
-export function EntryRow({ entry, isEditor }: { entry: EntryRowData; isEditor: boolean }) {
+export function EntryRow({
+  entry,
+  canEdit,
+  isEditor,
+}: {
+  entry: EntryRowData;
+  canEdit?: boolean;
+  isEditor?: boolean;
+}) {
+  const allowEdit = canEdit !== undefined ? canEdit : !!isEditor;
   const [expanded, setExpanded] = useState(false);
 
   const materials = (Object.keys(MATERIAL_LABELS) as MaterialKey[])
@@ -72,7 +81,7 @@ export function EntryRow({ entry, isEditor }: { entry: EntryRowData; isEditor: b
               OUT <AnimatedNumber value={disposed} decimals={2} />
             </div>
           </div>
-          {isEditor && (
+          {allowEdit && (
             <Link
               href={`/entry/${entry.id}`}
               aria-label={`Edit entry for ${entry.report_date}`}

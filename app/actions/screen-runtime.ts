@@ -1,4 +1,4 @@
-// app/actions/bio-mining-entries.ts
+// app/actions/screen-runtime.ts
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
@@ -6,38 +6,48 @@ import { TAGS } from "@/lib/data";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { validateEntry, MATERIAL_FIELDS, shiftsForAgency } from "@/lib/entries";
+import { validateRuntimeLog } from "@/lib/runtime";
 import { parseRole, canWriteAgency, canEditRecord } from "@/lib/access";
 import { sendPushNotification } from "@/lib/push";
 
-export interface EntryFormState {
+export interface RuntimeFormState {
   errors?: Record<string, string>;
   error?: string;
 }
 
-/** Postgres unique_violation — the (phase, date, shift) partial unique index. */
 const UNIQUE_VIOLATION = "23505";
 const CHECK_VIOLATION = "23514";
 const INSUFFICIENT_PRIVILEGE = "42501";
-const DUPLICATE_MESSAGE =
-  "An entry already exists for this phase on that date and shift. Edit the existing entry instead.";
+const DUPLICATE_MESSAGE = "Already logged for this date and shift. Edit it instead.";
 const PERMISSION_MESSAGE = "You don't have permission to change this record.";
 
 function utcToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function readEntryForm(formData: FormData): Record<string, unknown> {
-  const raw: Record<string, unknown> = {
-    report_date: formData.get("report_date"),
+function formatNotificationDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+function readRuntimeForm(formData: FormData): Record<string, unknown> {
+  return {
+    log_date: formData.get("log_date"),
     shift: formData.get("shift"),
-    inward_mt: formData.get("inward_mt"),
-    remarks: formData.get("remarks"),
+    red_runtime_h: formData.get("red_runtime_h"),
+    red_runtime_m: formData.get("red_runtime_m"),
+    red_breakdown_h: formData.get("red_breakdown_h"),
+    red_breakdown_m: formData.get("red_breakdown_m"),
+    red_breakdown_reasons: formData.get("red_breakdown_reasons"),
+    yellow_runtime_h: formData.get("yellow_runtime_h"),
+    yellow_runtime_m: formData.get("yellow_runtime_m"),
+    yellow_breakdown_h: formData.get("yellow_breakdown_h"),
+    yellow_breakdown_m: formData.get("yellow_breakdown_m"),
+    yellow_breakdown_reasons: formData.get("yellow_breakdown_reasons"),
   };
-  for (const field of MATERIAL_FIELDS) {
-    raw[field.key] = formData.get(field.key);
-  }
-  return raw;
 }
 
 async function getAuthContext() {
@@ -58,16 +68,17 @@ async function getAuthContext() {
   return { supabase, user, session };
 }
 
-export async function createEntry(
+export async function createRuntimeLog(
   phaseAgencyId: string,
-  _prevState: EntryFormState,
+  _prevState: RuntimeFormState,
   formData: FormData
-): Promise<EntryFormState> {
+): Promise<RuntimeFormState> {
   const { supabase, user, session } = await getAuthContext();
   if (!user || !session) {
     return { error: "You're signed out. Sign in again to save." };
   }
 
+  // Fetch phase agency to verify permission
   const { data: phase } = await supabase
     .from("phase_master")
     .select("agency")
@@ -78,49 +89,39 @@ export async function createEntry(
     return { error: PERMISSION_MESSAGE };
   }
 
-  const validation = validateEntry(readEntryForm(formData), utcToday());
+  const validation = validateRuntimeLog(readRuntimeForm(formData), utcToday());
   if (!validation.valid || !validation.value) {
     return { errors: validation.errors };
   }
 
-  // Reject a shift that the phase's agency doesn't work
-  const allowedShifts = shiftsForAgency(phase.agency);
-  if (!allowedShifts.includes(validation.value.shift)) {
-    return {
-      errors: {
-        shift: `Shift ${validation.value.shift} is not valid for ${phase.agency}.`,
-      },
-    };
-  }
-
-  const { error } = await supabase.from("bio_mining_entries").insert({
+  const { error } = await supabase.from("screen_runtime_logs").insert({
     phase_agency_id: phaseAgencyId,
     created_by: user.id,
     ...validation.value,
   });
 
   if (error) {
-    console.error("createEntry failed:", error);
+    console.error("createRuntimeLog failed:", error);
     if (error.code === UNIQUE_VIOLATION) return { error: DUPLICATE_MESSAGE };
     if (error.code === INSUFFICIENT_PRIVILEGE) return { error: PERMISSION_MESSAGE };
     if (error.code === CHECK_VIOLATION) {
       return { error: "Could not save. Please check the values and try again." };
     }
-    return { error: error.message || "Could not save the entry. Please try again." };
+    return { error: "Could not save. Please try again." };
   }
 
   revalidatePath("/");
   revalidatePath(`/phase/${phaseAgencyId}`);
-  updateTag(TAGS.entries);
-  updateTag(TAGS.phases);
+  revalidatePath(`/phase/${phaseAgencyId}/runtime`);
+  updateTag(TAGS.runtime);
 
-  // Fire push notification after the response — never blocks the user.
+  const logDate = validation.value.log_date;
+  const shift = validation.value.shift;
+
   after(async () => {
-    const date = validation.value!.report_date as string;
-    const shift = (validation.value!.shift as string) ?? "";
     await sendPushNotification({
-      title: "New Bio-Mining Entry",
-      body: `Entry added for ${date}${shift ? ` (${shift} shift)` : ""}.`,
+      title: "Screen Runtime",
+      body: `Card Box screen runtime logged · ${formatNotificationDate(logDate)}, ${shift} shift`,
       url: `/phase/${phaseAgencyId}`,
     });
   });
@@ -128,21 +129,22 @@ export async function createEntry(
   redirect(`/phase/${phaseAgencyId}`);
 }
 
-export async function updateEntry(
-  entryId: string,
+export async function updateRuntimeLog(
+  logId: string,
   phaseAgencyId: string,
-  _prevState: EntryFormState,
+  _prevState: RuntimeFormState,
   formData: FormData
-): Promise<EntryFormState> {
+): Promise<RuntimeFormState> {
   const { supabase, user, session } = await getAuthContext();
   if (!user || !session) {
     return { error: "You're signed out. Sign in again to save." };
   }
 
+  // Fetch record and phase agency to check permission
   const { data: existing } = await supabase
-    .from("bio_mining_entries")
+    .from("screen_runtime_logs")
     .select("created_by, phase_master(agency)")
-    .eq("id", entryId)
+    .eq("id", logId)
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -152,35 +154,26 @@ export async function updateEntry(
     return { error: PERMISSION_MESSAGE };
   }
 
-  const validation = validateEntry(readEntryForm(formData), utcToday());
+  const validation = validateRuntimeLog(readRuntimeForm(formData), utcToday());
   if (!validation.valid || !validation.value) {
     return { errors: validation.errors };
   }
 
-  const allowedShifts = shiftsForAgency(phaseAgency);
-  if (!allowedShifts.includes(validation.value.shift)) {
-    return {
-      errors: {
-        shift: `Shift ${validation.value.shift} is not valid for ${phaseAgency}.`,
-      },
-    };
-  }
-
   const { data, error } = await supabase
-    .from("bio_mining_entries")
+    .from("screen_runtime_logs")
     .update(validation.value)
-    .eq("id", entryId)
+    .eq("id", logId)
     .is("deleted_at", null)
     .select("id");
 
   if (error) {
-    console.error("updateEntry failed:", error);
+    console.error("updateRuntimeLog failed:", error);
     if (error.code === UNIQUE_VIOLATION) return { error: DUPLICATE_MESSAGE };
     if (error.code === INSUFFICIENT_PRIVILEGE) return { error: PERMISSION_MESSAGE };
     if (error.code === CHECK_VIOLATION) {
       return { error: "Could not save. Please check the values and try again." };
     }
-    return { error: error.message || "Could not save the entry. Please try again." };
+    return { error: "Could not save. Please try again." };
   }
 
   if (!data || data.length === 0) {
@@ -189,25 +182,24 @@ export async function updateEntry(
 
   revalidatePath("/");
   revalidatePath(`/phase/${phaseAgencyId}`);
-  updateTag(TAGS.entries);
-  updateTag(TAGS.phases);
+  revalidatePath(`/phase/${phaseAgencyId}/runtime`);
+  updateTag(TAGS.runtime);
   redirect(`/phase/${phaseAgencyId}`);
 }
 
-/**
- * Soft delete: sets deleted_at so the row drops out of every read query and the
- * phase_totals / phase_material_breakdown views, while staying recoverable.
- */
-export async function deleteEntry(entryId: string, phaseAgencyId: string): Promise<EntryFormState> {
+export async function deleteRuntimeLog(
+  logId: string,
+  phaseAgencyId: string
+): Promise<RuntimeFormState> {
   const { supabase, user, session } = await getAuthContext();
   if (!user || !session) {
     return { error: "You're signed out. Sign in again to save." };
   }
 
   const { data: existing } = await supabase
-    .from("bio_mining_entries")
+    .from("screen_runtime_logs")
     .select("created_by, phase_master(agency)")
-    .eq("id", entryId)
+    .eq("id", logId)
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -218,16 +210,16 @@ export async function deleteEntry(entryId: string, phaseAgencyId: string): Promi
   }
 
   const { data, error } = await supabase
-    .from("bio_mining_entries")
+    .from("screen_runtime_logs")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", entryId)
+    .eq("id", logId)
     .is("deleted_at", null)
     .select("id");
 
   if (error) {
-    console.error("deleteEntry failed:", error);
+    console.error("deleteRuntimeLog failed:", error);
     if (error.code === INSUFFICIENT_PRIVILEGE) return { error: PERMISSION_MESSAGE };
-    return { error: error.message || "Could not delete the entry. Please try again." };
+    return { error: "Could not delete the record. Please try again." };
   }
 
   if (!data || data.length === 0) {
@@ -236,7 +228,7 @@ export async function deleteEntry(entryId: string, phaseAgencyId: string): Promi
 
   revalidatePath("/");
   revalidatePath(`/phase/${phaseAgencyId}`);
-  updateTag(TAGS.entries);
-  updateTag(TAGS.phases);
+  revalidatePath(`/phase/${phaseAgencyId}/runtime`);
+  updateTag(TAGS.runtime);
   redirect(`/phase/${phaseAgencyId}`);
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { isEditor } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { getPhaseTotals, getLatestMrfLogDate } from "@/lib/data";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
@@ -24,20 +24,16 @@ function formatDate(d: string | null) {
 }
 
 export default async function Home() {
-  // The two data reads are cached (`lib/data.ts`), so on a warm cache they
-  // cost no network at all. Only `isEditor()` is request-bound, and that is a
-  // local JWT signature check — no round trip either. Between them, rendering
-  // this page went from three serialized Supabase calls to none.
-  const [user, phases, mrfLatestDate] = await Promise.all([
-    isEditor(),
+  const [session, phases, mrfLatestDate] = await Promise.all([
+    getSession(),
     getPhaseTotals(),
     getLatestMrfLogDate(),
   ]);
 
-  // In-progress cards lead, completed ones stack at the bottom (PRD: surface
-  // active work first). Each group keeps phase order; MRF is always in-progress.
-  // The window title bar carries the location and the bold body line the agency
-  // (swapped 2026-09-21 — see the Home/Phase detail design spec's amendment).
+  const isOperator = session?.role === "operator";
+  const isEditor = session?.role === "editor";
+  const isViewer = session?.role === "viewer";
+
   type Card = {
     key: string;
     title: string;
@@ -47,10 +43,13 @@ export default async function Home() {
     content: React.ReactNode;
   };
 
-  const bioMiningCards: Card[] = (phases ?? []).map((p) => ({
+  // For the operator: only phases of his agency, and no MRF card
+  const filteredPhases = isOperator
+    ? (phases ?? []).filter((p) => p.agency === session.agency)
+    : (phases ?? []);
+
+  const bioMiningCards: Card[] = filteredPhases.map((p) => ({
     key: p.phase_agency_id ?? `phase-${p.phase}-${p.agency}`,
-    // Fall back to the agency when an agency has no mapped location yet, so the
-    // title bar never ends on a dangling separator.
     title: `BIO-MINING · PHASE ${p.phase} · ${(LOCATION[p.agency!] ?? p.agency!).toUpperCase()}`,
     agency: p.agency!,
     lastReportDate: p.last_report_date,
@@ -100,18 +99,20 @@ export default async function Home() {
   };
 
   const statusRank = (c: Card) => (c.completed ? 1 : 0);
-  const cards = [...bioMiningCards, mrfCard].sort(
-    (a, b) => statusRank(a) - statusRank(b),
-  );
+  const cardList = isOperator ? bioMiningCards : [...bioMiningCards, mrfCard];
+  const cards = cardList.sort((a, b) => statusRank(a) - statusRank(b));
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar title="PROJECT STATUS" action={user ? <NotificationBell /> : undefined} />
-      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3 animate-fade-in">
-        <div className="mb-1 font-mono text-xs">
-          {user ? (
+      <TopBar
+        title="PROJECT STATUS"
+        action={isEditor ? <NotificationBell /> : undefined}
+      />
+      <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3 animate-fade-in font-mono">
+        <div className="mb-1 text-xs">
+          {isEditor ? (
             <div className="flex items-center justify-between">
-              <Link href="/login" className="text-accent-ink underline">
+              <Link href="/login" className="text-accent-ink underline font-bold">
                 EDITOR SETTINGS
               </Link>
               <form action={signOut}>
@@ -120,10 +121,30 @@ export default async function Home() {
                 </button>
               </form>
             </div>
+          ) : isViewer ? (
+            <div className="flex items-center justify-between">
+              <span className="text-muted font-bold">SIGNED IN AS VIEWER</span>
+              <form action={signOut}>
+                <button type="submit" className="text-muted hover:underline">
+                  SIGN OUT
+                </button>
+              </form>
+            </div>
+          ) : isOperator ? (
+            <div className="flex items-center justify-between">
+              <span className="text-muted font-bold">SIGNED IN AS OPERATOR</span>
+              <form action={signOut}>
+                <button type="submit" className="text-muted hover:underline">
+                  SIGN OUT
+                </button>
+              </form>
+            </div>
           ) : (
-            <Link href="/login" className="text-accent-ink">
-              EDITOR LOGIN
-            </Link>
+            <div className="flex items-center justify-between">
+              <Link href="/login" className="text-accent-ink underline">
+                LOGIN
+              </Link>
+            </div>
           )}
         </div>
 
@@ -133,8 +154,11 @@ export default async function Home() {
           </Window>
         ))}
       </div>
-      <BottomNav active="home">
-        <ReplyButton context={{ label: "Home — all projects", path: "/" }} isEditor={user} />
+      <BottomNav active="home" isOperator={isOperator}>
+        <ReplyButton
+          context={{ label: "Home — all projects", path: "/" }}
+          role={session?.role}
+        />
       </BottomNav>
     </div>
   );

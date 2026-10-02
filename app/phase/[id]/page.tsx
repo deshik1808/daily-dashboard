@@ -1,8 +1,18 @@
 // app/phase/[id]/page.tsx
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { isEditor as getIsEditor } from "@/lib/auth";
-import { getPhaseById, getPhaseMaterials, getPhaseEntries } from "@/lib/data";
+import { notFound, redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import {
+  getPhaseById,
+  getPhaseMaterials,
+  getPhaseEntries,
+  getRuntimeLogs,
+} from "@/lib/data";
+import { canWriteAgency, canEditRecord } from "@/lib/access";
+import {
+  SCREEN_RUNTIME_AGENCIES,
+  summarizeRuntime,
+} from "@/lib/runtime";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
 import { Window } from "@/components/design/Window";
@@ -12,6 +22,8 @@ import { ProjectNote } from "@/components/design/ProjectNote";
 import { ReplyButton } from "@/components/design/ReplyButton";
 import { AnimatedNumber } from "@/components/design/AnimatedNumber";
 import { EntryRow } from "@/components/design/EntryRow";
+import { RuntimeCard } from "@/components/design/RuntimeCard";
+import { RuntimeRow } from "@/components/design/RuntimeRow";
 import { phaseToCode } from "@/lib/phase-codes";
 import { pctOfInward } from "@/lib/phase";
 
@@ -30,18 +42,18 @@ export default async function PhaseDetailPage({
   const { range } = await searchParams;
   const isAllTime = range === "all";
 
-  // The 30-day window is computed here, outside the cache scope: a `use cache`
-  // function must be deterministic, so baking `Date.now()` into one would pin
-  // the cached entry to whatever day it was first rendered.
+  // The 30-day window is computed here, outside the cache scope
   let since: string | null = null;
   if (!isAllTime) {
     // eslint-disable-next-line react-hooks/purity
     since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   }
 
-  // All cached except the session check, which is a local token verification.
-  const [isEditor, phase, materials, entries] = await Promise.all([
-    getIsEditor(),
+  // eslint-disable-next-line react-hooks/purity
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const [session, phase, materials, entries] = await Promise.all([
+    getSession(),
     getPhaseById(id),
     getPhaseMaterials(id),
     getPhaseEntries(id, since),
@@ -49,7 +61,23 @@ export default async function PhaseDetailPage({
 
   if (!phase) notFound();
 
+  // If operator visits another agency's phase, redirect to home
+  if (session?.role === "operator" && session.agency !== phase.agency) {
+    redirect("/");
+  }
+
+  const isEditor = session?.role === "editor";
+  const hasRuntime =
+    phase.agency && (SCREEN_RUNTIME_AGENCIES as readonly string[]).includes(phase.agency);
+
+  // Runtime summary always covers last 30 days
+  const runtimeLogs = hasRuntime ? await getRuntimeLogs(id, thirtyDaysAgo) : [];
+  const runtimeSummary = hasRuntime ? summarizeRuntime(runtimeLogs ?? []) : null;
+  const latestRuntimeShifts = (runtimeLogs ?? []).slice(0, 2);
+
   const lossPct = pctOfInward(phase.balance_mt, phase.cumulative_inward_mt);
+  const canAddEntry = canWriteAgency(session, phase.agency ?? "");
+  const canAddRuntime = canWriteAgency(session, phase.agency ?? "");
 
   return (
     <div className="flex h-full flex-col">
@@ -102,18 +130,43 @@ export default async function PhaseDetailPage({
           )}
         </Window>
 
-        <ProjectNote
-          phaseAgencyId={id}
-          initialNote={phase.current_note}
-          isEditor={isEditor}
-        />
+        {session?.role !== "operator" && (
+          <ProjectNote
+            phaseAgencyId={id}
+            initialNote={phase.current_note}
+            isEditor={isEditor}
+          />
+        )}
 
         <Window title="MATERIAL BREAKDOWN">
           <MaterialTable rows={(materials ?? []) as MaterialRow[]} />
         </Window>
 
+        {hasRuntime && (
+          <RuntimeCard
+            summary={runtimeSummary}
+            addHref={canAddRuntime ? `/runtime/new?phase=${id}` : null}
+            fullLogHref={`/phase/${id}/runtime`}
+          >
+            {latestRuntimeShifts.length === 0 ? (
+              <p className="py-2 text-xs text-muted">No runtime logged yet.</p>
+            ) : (
+              latestRuntimeShifts.map((log) => (
+                <RuntimeRow
+                  key={log.id}
+                  log={log}
+                  canEdit={canEditRecord(session, {
+                    agency: phase.agency ?? "",
+                    created_by: log.created_by,
+                  })}
+                />
+              ))
+            )}
+          </RuntimeCard>
+        )}
+
         <Window title="ENTRIES">
-          {isEditor && (
+          {canAddEntry && (
             <Link
               href={`/entry/new?phase=${id}`}
               className="mb-2.5 block rounded-control border border-ink bg-ink py-2 text-center font-mono text-xs font-bold tracking-wide text-paper"
@@ -146,18 +199,25 @@ export default async function PhaseDetailPage({
           )}
 
           {(entries ?? []).map((e) => (
-            <EntryRow key={e.id} entry={e} isEditor={isEditor} />
+            <EntryRow
+              key={e.id}
+              entry={e}
+              canEdit={canEditRecord(session, {
+                agency: phase.agency ?? "",
+                created_by: e.created_by,
+              })}
+            />
           ))}
         </Window>
       </div>
-      <BottomNav active="home">
+      <BottomNav active="home" isOperator={session?.role === "operator"}>
         <ReplyButton
           context={{
             label: `Bio-Mining Phase ${phase.phase} · ${phase.agency}`,
             path: `/phase/${id}`,
             shortPath: phase.phase && phase.agency ? `/p/${phaseToCode(phase.phase, phase.agency)}` : undefined,
           }}
-          isEditor={isEditor}
+          role={session?.role}
         />
       </BottomNav>
     </div>

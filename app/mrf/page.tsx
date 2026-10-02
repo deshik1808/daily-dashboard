@@ -1,7 +1,7 @@
-// app/mrf/page.tsx
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isEditor } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { getMrfLogs } from "@/lib/data";
 import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
@@ -14,11 +14,16 @@ import { ReplyButton } from "@/components/design/ReplyButton";
 const THUMB_LIMIT = 3;
 
 export default async function MrfPage() {
+  const session = await getSession();
+  if (session?.role === "operator") {
+    redirect("/");
+  }
+  const isEditorUser = session?.role === "editor";
+
   // The log list is cached; only the photo signing below needs a live,
   // cookie-bound client, because signed storage URLs are short-lived and so
   // must not be cached alongside the rows.
-  const [user, logs, supabase] = await Promise.all([
-    isEditor(),
+  const [logs, supabase] = await Promise.all([
     getMrfLogs(30),
     createClient(),
   ]);
@@ -33,7 +38,7 @@ export default async function MrfPage() {
     <div className="flex h-full flex-col">
       <TopBar title="MRF PLANT · RAGHURAM HUME PIPES" backHref="/" />
       <div className="flex-1 space-y-2.5 overflow-y-auto bg-canvas p-3 animate-fade-in">
-        {user && (
+        {isEditorUser && (
           <Link
             href="/mrf/new"
             className="block rounded-control border border-ink bg-ink py-2 text-center font-mono text-xs font-bold tracking-wide text-paper"
@@ -66,8 +71,8 @@ export default async function MrfPage() {
           );
         })}
       </div>
-      <BottomNav active="home">
-        <ReplyButton context={{ label: "MRF Plant · all logs", path: "/mrf" }} isEditor={user} />
+      <BottomNav active="home" isOperator={false}>
+        <ReplyButton context={{ label: "MRF Plant · all logs", path: "/mrf" }} role={session?.role} />
       </BottomNav>
     </div>
   );

@@ -1,5 +1,6 @@
 // app/phase/[id]/edit/page.tsx
 import { notFound, redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TopBar } from "@/components/design/TopBar";
 import { PhaseEditForm } from "@/components/design/PhaseEditForm";
@@ -7,12 +8,11 @@ import { PhaseEditForm } from "@/components/design/PhaseEditForm";
 export default async function EditPhasePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (session.role !== "editor") redirect("/");
 
+  const supabase = await createClient();
   const { data: phase, error } = await supabase
     .from("phase_master")
     .select("id, phase, agency, order_qty_mt, status, current_note")

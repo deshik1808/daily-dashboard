@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -253,6 +253,72 @@ export type Database = {
         }
         Relationships: []
       }
+      screen_runtime_logs: {
+        Row: {
+          created_at: string
+          created_by: string
+          deleted_at: string | null
+          id: string
+          log_date: string
+          phase_agency_id: string
+          red_breakdown_min: number
+          red_breakdown_reasons: string | null
+          red_runtime_min: number
+          shift: Database["public"]["Enums"]["shift_enum"]
+          updated_at: string
+          yellow_breakdown_min: number
+          yellow_breakdown_reasons: string | null
+          yellow_runtime_min: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          deleted_at?: string | null
+          id?: string
+          log_date: string
+          phase_agency_id: string
+          red_breakdown_min?: number
+          red_breakdown_reasons?: string | null
+          red_runtime_min: number
+          shift: Database["public"]["Enums"]["shift_enum"]
+          updated_at?: string
+          yellow_breakdown_min?: number
+          yellow_breakdown_reasons?: string | null
+          yellow_runtime_min: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          deleted_at?: string | null
+          id?: string
+          log_date?: string
+          phase_agency_id?: string
+          red_breakdown_min?: number
+          red_breakdown_reasons?: string | null
+          red_runtime_min?: number
+          shift?: Database["public"]["Enums"]["shift_enum"]
+          updated_at?: string
+          yellow_breakdown_min?: number
+          yellow_breakdown_reasons?: string | null
+          yellow_runtime_min?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "screen_runtime_logs_phase_agency_id_fkey"
+            columns: ["phase_agency_id"]
+            isOneToOne: false
+            referencedRelation: "phase_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "screen_runtime_logs_phase_agency_id_fkey"
+            columns: ["phase_agency_id"]
+            isOneToOne: false
+            referencedRelation: "phase_totals"
+            referencedColumns: ["phase_agency_id"]
+          },
+        ]
+      }
       short_links: {
         Row: {
           created_at: string
@@ -301,7 +367,9 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      app_agency: { Args: never; Returns: string }
+      app_role: { Args: never; Returns: string }
+      is_my_agency_phase: { Args: { p_phase_id: string }; Returns: boolean }
     }
     Enums: {
       agency_enum: "Zigma" | "Card Box"
@@ -444,4 +512,3 @@ export const Constants = {
     },
   },
 } as const
-

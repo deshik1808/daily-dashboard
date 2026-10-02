@@ -8,6 +8,7 @@ import {
   validateShift,
   validateEntry,
   sumDisposed,
+  shiftsForAgency,
   MATERIAL_FIELDS,
 } from "../lib/entries.ts";
 
@@ -109,3 +110,11 @@ test("sumDisposed treats blanks as zero", () => {
   assert.equal(sumDisposed({ soil_mt: 10, rdf_mt: 5, stones_mt: null }), 15);
   assert.equal(sumDisposed({}), 0);
 });
+
+test("shiftsForAgency returns Day and Night for Card Box, all shifts otherwise", () => {
+  assert.deepEqual(shiftsForAgency("Card Box"), ["Day", "Night"]);
+  assert.deepEqual(shiftsForAgency("Zigma"), ["Day", "Night", "Full day"]);
+  assert.deepEqual(shiftsForAgency(null), ["Day", "Night", "Full day"]);
+  assert.deepEqual(shiftsForAgency(undefined), ["Day", "Night", "Full day"]);
+});
+

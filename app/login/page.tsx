@@ -1,18 +1,36 @@
 // app/login/page.tsx
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { parseRole, type AppRole } from "@/lib/access";
 import { TopBar } from "@/components/design/TopBar";
 import { Window } from "@/components/design/Window";
 import { updateReplyWhatsAppNumber } from "@/app/actions/settings";
 import { signOut } from "@/app/actions/sign-out";
 
-export default function LoginPage() {
+interface SessionInfo {
+  email: string;
+  role: AppRole | null;
+  agency: string | null;
+}
+
+function getSafeNextPath(next: string | null): string {
+  if (!next) return "/";
+  if (!next.startsWith("/")) return "/";
+  if (next.startsWith("//")) return "/";
+  if (next === "/login" || next.startsWith("/login?")) return "/";
+  return next;
+}
+
+function LoginContent() {
   const router = useRouter();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
+
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   // Sign-in state
@@ -21,14 +39,13 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Settings state
+  // Settings state (Editor-only)
   const [phoneNumber, setPhoneNumber] = useState("");
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneSaving, setPhoneSaving] = useState(false);
   const [phoneSuccess, setPhoneSuccess] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
-  // Check auth state on load
   useEffect(() => {
     const supabase = createClient();
     async function checkUser() {
@@ -37,19 +54,26 @@ export default function LoginPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        setUserEmail(user.email ?? "Editor");
-        // Fetch current phone setting
-        setPhoneLoading(true);
-        const { data } = await supabase
-          .from("app_settings")
-          .select("value")
-          .eq("key", "reply_whatsapp_number")
-          .maybeSingle();
+        const parsed = parseRole(user.app_metadata);
+        setSessionInfo({
+          email: user.email ?? "",
+          role: parsed.role,
+          agency: parsed.agency,
+        });
 
-        if (data?.value) {
-          setPhoneNumber(data.value);
+        if (parsed.role === "editor") {
+          setPhoneLoading(true);
+          const { data } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("key", "reply_whatsapp_number")
+            .maybeSingle();
+
+          if (data?.value) {
+            setPhoneNumber(data.value);
+          }
+          setPhoneLoading(false);
         }
-        setPhoneLoading(false);
       }
       setCheckingAuth(false);
     }
@@ -61,10 +85,11 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data: signInData, error: signInError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
     setLoading(false);
 
     if (signInError) {
@@ -73,16 +98,16 @@ export default function LoginPage() {
     }
 
     if (signInData.user) {
-      setUserEmail(signInData.user.email ?? "Editor");
-      // Fetch phone number
-      const { data } = await supabase
-        .from("app_settings")
-        .select("value")
-        .eq("key", "reply_whatsapp_number")
-        .maybeSingle();
-      if (data?.value) {
-        setPhoneNumber(data.value);
-      }
+      const parsed = parseRole(signInData.user.app_metadata);
+      setSessionInfo({
+        email: signInData.user.email ?? "",
+        role: parsed.role,
+        agency: parsed.agency,
+      });
+
+      // Redirect to next or home
+      const destination = getSafeNextPath(next);
+      router.push(destination);
       router.refresh();
     }
   }
@@ -108,89 +133,140 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  const topBarTitle = sessionInfo
+    ? sessionInfo.role === "editor"
+      ? "EDITOR SETTINGS"
+      : "ACCOUNT"
+    : "LOGIN";
+
   return (
-    <div className="flex h-full flex-col">
-      <TopBar title={userEmail ? "EDITOR SETTINGS" : "EDITOR LOGIN"} backHref="/" />
+    <div className="flex h-full flex-col font-mono">
+      <TopBar title={topBarTitle} backHref={sessionInfo ? "/" : undefined} />
       <div className="flex-1 space-y-3 overflow-y-auto bg-canvas p-3">
         {checkingAuth ? (
-          <div className="py-8 text-center font-mono text-xs text-muted">CHECKING AUTH...</div>
-        ) : userEmail ? (
+          <div className="py-8 text-center text-xs text-muted">CHECKING AUTH...</div>
+        ) : sessionInfo ? (
           <>
-            <Window title="EDITOR ACCOUNT">
-              <div className="space-y-2 font-mono text-xs">
+            <Window title="ACCOUNT">
+              <div className="space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-muted">SIGNED IN AS:</span>
-                  <span className="font-bold text-ink">{userEmail}</span>
+                  <span className="font-bold text-ink">{sessionInfo.email}</span>
                 </div>
+
                 <div className="flex items-center justify-between border-t border-sage/50 pt-2">
-                  <Link href="/" className="text-accent-ink underline">
-                    ← GO TO DASHBOARD
-                  </Link>
-                  <form action={signOut}>
-                    <button type="submit" className="text-alert underline">
-                      SIGN OUT
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </Window>
-
-            <Window title="WHATSAPP REPLY NUMBER">
-              <form onSubmit={handleSavePhone} className="flex flex-col gap-3">
-                <p className="font-mono text-xs text-muted leading-relaxed">
-                  Queries from the floating <span className="font-bold text-ink">REPLY</span> button will be sent to this WhatsApp number.
-                </p>
-
-                <div>
-                  <label htmlFor="phoneNumber" className="font-mono text-[10px] font-bold tracking-wide">
-                    PHONE NUMBER (E.164 DIGITS, WITH COUNTRY CODE)
-                  </label>
-                  <input
-                    id="phoneNumber"
-                    type="tel"
-                    placeholder="e.g. 919876543210"
-                    value={phoneNumber}
-                    onChange={(e) => {
-                      setPhoneNumber(e.target.value);
-                      setPhoneSuccess(false);
-                      setPhoneError(null);
-                    }}
-                    required
-                    disabled={phoneLoading}
-                    className="mt-1 w-full rounded-control border border-ink bg-paper px-2.5 py-2 font-mono text-sm tracking-wider"
-                  />
-                  <span className="mt-1 block font-mono text-[10px] text-muted">
-                    Format: country code + 10-digit mobile (no + or spaces). India example: 919876543210
+                  <span className="text-muted">ROLE:</span>
+                  <span className="font-bold text-ink">
+                    {sessionInfo.role ? (
+                      <>
+                        {sessionInfo.role.toUpperCase()}
+                        {sessionInfo.agency ? ` · ${sessionInfo.agency}` : ""}
+                      </>
+                    ) : (
+                      "NO ACCESS"
+                    )}
                   </span>
                 </div>
 
-                {phoneError && (
-                  <p role="alert" className="font-mono text-xs text-alert">
-                    {phoneError}
-                  </p>
+                {!sessionInfo.role ? (
+                  <div className="border-t border-sage/50 pt-2">
+                    <p className="text-alert leading-relaxed">
+                      This login has no access yet. Ask Deshik to set it up, then sign
+                      out and back in.
+                    </p>
+                    <div className="mt-3 flex justify-end">
+                      <form action={signOut}>
+                        <button type="submit" className="text-alert font-bold underline">
+                          SIGN OUT
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between border-t border-sage/50 pt-2">
+                    <Link href="/" className="text-accent-ink underline font-bold">
+                      ← GO TO DASHBOARD
+                    </Link>
+                    <form action={signOut}>
+                      <button type="submit" className="text-alert underline font-bold">
+                        SIGN OUT
+                      </button>
+                    </form>
+                  </div>
                 )}
-
-                {phoneSuccess && (
-                  <p role="status" className="font-mono text-xs font-bold text-accent-ink">
-                    ✓ WhatsApp reply number updated successfully!
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={phoneSaving || phoneLoading}
-                  className="rounded-control border border-ink bg-ink py-2 font-mono text-xs font-bold tracking-wide text-paper transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  {phoneSaving ? "SAVING NUMBER..." : "SAVE NUMBER"}
-                </button>
-              </form>
+              </div>
             </Window>
+
+            {sessionInfo.role === "editor" && (
+              <Window title="WHATSAPP REPLY NUMBER">
+                <form onSubmit={handleSavePhone} className="flex flex-col gap-3">
+                  <p className="text-xs text-muted leading-relaxed">
+                    Queries from the floating{" "}
+                    <span className="font-bold text-ink">REPLY</span> button will be
+                    sent to this WhatsApp number.
+                  </p>
+
+                  <div>
+                    <label
+                      htmlFor="phoneNumber"
+                      className="text-[10px] font-bold tracking-wide"
+                    >
+                      PHONE NUMBER (E.164 DIGITS, WITH COUNTRY CODE)
+                    </label>
+                    <input
+                      id="phoneNumber"
+                      type="tel"
+                      placeholder="e.g. 919876543210"
+                      value={phoneNumber}
+                      onChange={(e) => {
+                        setPhoneNumber(e.target.value);
+                        setPhoneSuccess(false);
+                        setPhoneError(null);
+                      }}
+                      required
+                      disabled={phoneLoading}
+                      className="mt-1 w-full rounded-control border border-ink bg-paper px-2.5 py-2 text-sm tracking-wider"
+                    />
+                    <span className="mt-1 block text-[10px] text-muted">
+                      Format: country code + 10-digit mobile (no + or spaces). India
+                      example: 919876543210
+                    </span>
+                  </div>
+
+                  {phoneError && (
+                    <p role="alert" className="text-xs text-alert">
+                      {phoneError}
+                    </p>
+                  )}
+
+                  {phoneSuccess && (
+                    <p
+                      role="status"
+                      className="text-xs font-bold text-accent-ink"
+                    >
+                      ✓ WhatsApp reply number updated successfully!
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={phoneSaving || phoneLoading}
+                    className="rounded-control border border-ink bg-ink py-2 text-xs font-bold tracking-wide text-paper transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {phoneSaving ? "SAVING NUMBER..." : "SAVE NUMBER"}
+                  </button>
+                </form>
+              </Window>
+            )}
           </>
         ) : (
           <Window title="SIGN IN">
             <form onSubmit={handleSignIn} className="flex flex-col gap-3">
               <div>
-                <label htmlFor="email" className="font-mono text-[10px] tracking-wide">
+                <label
+                  htmlFor="email"
+                  className="text-[10px] font-bold tracking-wide text-muted"
+                >
                   EMAIL
                 </label>
                 <input
@@ -199,11 +275,14 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="mt-1 w-full rounded-control border border-ink bg-paper px-2 py-1.5 text-[15px]"
+                  className="mt-1 min-h-[44px] w-full rounded-control border border-ink bg-paper px-2 py-1.5 text-sm"
                 />
               </div>
               <div>
-                <label htmlFor="password" className="font-mono text-[10px] tracking-wide">
+                <label
+                  htmlFor="password"
+                  className="text-[10px] font-bold tracking-wide text-muted"
+                >
                   PASSWORD
                 </label>
                 <input
@@ -212,18 +291,18 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="mt-1 w-full rounded-control border border-ink bg-paper px-2 py-1.5 text-[15px]"
+                  className="mt-1 min-h-[44px] w-full rounded-control border border-ink bg-paper px-2 py-1.5 text-sm"
                 />
               </div>
               {error && (
-                <p role="alert" className="font-mono text-xs text-alert">
+                <p role="alert" className="text-xs text-alert">
                   {error}
                 </p>
               )}
               <button
                 type="submit"
                 disabled={loading}
-                className="rounded-control border border-ink bg-ink py-2 font-mono text-xs font-bold tracking-wide text-paper disabled:opacity-50"
+                className="min-h-[44px] rounded-control border border-ink bg-ink py-2 text-xs font-bold tracking-wide text-paper disabled:opacity-50 hover:bg-ink/90"
               >
                 {loading ? "SIGNING IN..." : "SIGN IN"}
               </button>
@@ -232,5 +311,22 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full flex-col font-mono">
+          <TopBar title="LOGIN" />
+          <div className="flex-1 p-3 text-center text-xs text-muted">
+            LOADING...
+          </div>
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

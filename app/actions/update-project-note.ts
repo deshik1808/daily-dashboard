@@ -3,6 +3,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { validateAndNormalizeNote } from "@/lib/notes";
+import { parseRole } from "@/lib/access";
 
 export interface UpdateNoteResult {
   success: boolean;
@@ -30,7 +31,15 @@ export async function updateProjectNote(
   if (!user) {
     return {
       success: false,
-      error: "Unauthorized: Editor login required to update notes",
+      error: "You're signed out. Sign in again to save.",
+    };
+  }
+
+  const { role } = parseRole(user.app_metadata);
+  if (role !== "editor") {
+    return {
+      success: false,
+      error: "Unauthorized: Editor role required to update notes",
     };
   }
 
