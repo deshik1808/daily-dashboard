@@ -1,6 +1,10 @@
 // components/design/RuntimeRow.tsx
 import Link from "next/link";
-import { formatDuration, type ScreenRuntimeLog } from "@/lib/runtime";
+import {
+  formatDuration,
+  type MeterReadings,
+  type ScreenRuntimeLog,
+} from "@/lib/runtime";
 import { ScreenDot } from "@/components/design/ScreenDot";
 
 function formatDate(dateStr: string) {
@@ -17,12 +21,24 @@ function Remark({ text }: { text: string }) {
   );
 }
 
+function MeterLine({ open, close }: { open: number | null; close: number | null }) {
+  if (open === null || close === null) return null;
+  return (
+    <p className="mt-0.5 pl-3.5 text-[10px] text-muted">
+      meter {open} → {close}
+    </p>
+  );
+}
+
 export function RuntimeRow({
   log,
   canEdit,
+  meter,
 }: {
   log: ScreenRuntimeLog;
   canEdit: boolean;
+  /** Audit readings. Only passed for editor/operator; never rendered for viewers. */
+  meter?: MeterReadings;
 }) {
   return (
     <div className="border-b border-sage/60 py-2.5 last:border-b-0 font-mono text-xs">
@@ -67,6 +83,7 @@ export function RuntimeRow({
             </div>
           </div>
           {log.red_breakdown_reasons && <Remark text={log.red_breakdown_reasons} />}
+          {meter && <MeterLine open={meter.red_open} close={meter.red_close} />}
         </div>
 
         {/* Yellow Screen */}
@@ -94,6 +111,7 @@ export function RuntimeRow({
             </div>
           </div>
           {log.yellow_breakdown_reasons && <Remark text={log.yellow_breakdown_reasons} />}
+          {meter && <MeterLine open={meter.yellow_open} close={meter.yellow_close} />}
         </div>
       </div>
     </div>

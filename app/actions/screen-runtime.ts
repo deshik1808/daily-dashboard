@@ -6,7 +6,7 @@ import { TAGS } from "@/lib/data";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { validateRuntimeLog } from "@/lib/runtime";
+import { validateRuntimeLog, type MeterReadings } from "@/lib/runtime";
 import { parseRole, canWriteAgency, canEditRecord } from "@/lib/access";
 import { sendPushNotification } from "@/lib/push";
 
@@ -56,6 +56,10 @@ function readRuntimeForm(formData: FormData): Record<string, unknown> {
   };
 }
 
+function hasMeter(m: MeterReadings | undefined): m is MeterReadings {
+  return Boolean(m && (m.red_open !== null || m.yellow_open !== null));
+}
+
 async function getAuthContext() {
   const supabase = await createClient();
   const {
@@ -100,11 +104,15 @@ export async function createRuntimeLog(
     return { errors: validation.errors };
   }
 
-  const { error } = await supabase.from("screen_runtime_logs").insert({
-    phase_agency_id: phaseAgencyId,
-    created_by: user.id,
-    ...validation.value,
-  });
+  const { data: inserted, error } = await supabase
+    .from("screen_runtime_logs")
+    .insert({
+      phase_agency_id: phaseAgencyId,
+      created_by: user.id,
+      ...validation.value,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     console.error("createRuntimeLog failed:", error);
@@ -114,6 +122,21 @@ export async function createRuntimeLog(
       return { error: "Could not save. Please check the values and try again." };
     }
     return { error: "Could not save. Please try again." };
+  }
+
+  if (hasMeter(validation.meter)) {
+    const { error: meterError } = await supabase
+      .from("screen_meter_readings")
+      .insert({ runtime_log_id: inserted.id, ...validation.meter });
+    if (meterError) {
+      console.error("createRuntimeLog meter insert failed:", meterError);
+      // Don't leave a log whose readings were not kept: soft-delete it so the user can retry.
+      await supabase
+        .from("screen_runtime_logs")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", inserted.id);
+      return { error: "Could not save the meter readings. Please try again." };
+    }
   }
 
   revalidatePath("/");
@@ -184,6 +207,23 @@ export async function updateRuntimeLog(
 
   if (!data || data.length === 0) {
     return { error: PERMISSION_MESSAGE };
+  }
+
+  // Readings follow the latest saved entry: upsert in meter mode, clear in manual mode.
+  const meterResult = hasMeter(validation.meter)
+    ? await supabase
+        .from("screen_meter_readings")
+        .upsert({ runtime_log_id: logId, ...validation.meter })
+    : await supabase
+        .from("screen_meter_readings")
+        .update({ red_open: null, red_close: null, yellow_open: null, yellow_close: null })
+        .eq("runtime_log_id", logId);
+  if (meterResult.error) {
+    console.error("updateRuntimeLog meter save failed:", meterResult.error);
+    return {
+      error:
+        "Runtime saved, but the meter readings could not be saved. Please save again.",
+    };
   }
 
   revalidatePath("/");

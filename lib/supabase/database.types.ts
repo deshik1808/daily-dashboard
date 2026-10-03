@@ -253,6 +253,47 @@ export type Database = {
         }
         Relationships: []
       }
+      screen_meter_readings: {
+        Row: {
+          created_at: string
+          created_by: string
+          red_close: number | null
+          red_open: number | null
+          runtime_log_id: string
+          updated_at: string
+          yellow_close: number | null
+          yellow_open: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          red_close?: number | null
+          red_open?: number | null
+          runtime_log_id: string
+          updated_at?: string
+          yellow_close?: number | null
+          yellow_open?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          red_close?: number | null
+          red_open?: number | null
+          runtime_log_id?: string
+          updated_at?: string
+          yellow_close?: number | null
+          yellow_open?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "screen_meter_readings_runtime_log_id_fkey"
+            columns: ["runtime_log_id"]
+            isOneToOne: true
+            referencedRelation: "screen_runtime_logs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       screen_runtime_logs: {
         Row: {
           created_at: string

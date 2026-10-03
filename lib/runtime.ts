@@ -35,9 +35,18 @@ export interface RuntimeLogValues {
   yellow_breakdown_reasons: string | null;
 }
 
+/** Raw hour-meter readings for audit; null for a screen entered manually. */
+export interface MeterReadings {
+  red_open: number | null;
+  red_close: number | null;
+  yellow_open: number | null;
+  yellow_close: number | null;
+}
+
 export interface RuntimeValidationResult {
   valid: boolean;
   value?: RuntimeLogValues;
+  meter?: MeterReadings;
   errors?: Record<string, string>;
 }
 
@@ -241,7 +250,15 @@ export function validateRuntimeLog(
       if (breakdownMin > 0 && !reasonsFromInput) {
         errors[`${prefix}_breakdown_reasons`] = "Add a reason for the breakdown";
       }
-      return { runtimeMin, breakdownMin, reasons: reasonsFromInput };
+      return {
+        runtimeMin,
+        breakdownMin,
+        reasons: reasonsFromInput,
+        meter:
+          openParsed.ok && closeParsed.ok
+            ? { open: openParsed.value, close: closeParsed.value }
+            : { open: null, close: null },
+      };
     }
 
     const rawRunH = raw[`${prefix}_runtime_h`];
@@ -304,6 +321,7 @@ export function validateRuntimeLog(
       runtimeMin: runTotalMin,
       breakdownMin: bdTotalMin,
       reasons,
+      meter: { open: null, close: null },
     };
   }
 
@@ -316,6 +334,12 @@ export function validateRuntimeLog(
 
   return {
     valid: true,
+    meter: {
+      red_open: red.meter.open,
+      red_close: red.meter.close,
+      yellow_open: yellow.meter.open,
+      yellow_close: yellow.meter.close,
+    },
     value: {
       log_date: dateResult.ok ? dateResult.value : "",
       shift,

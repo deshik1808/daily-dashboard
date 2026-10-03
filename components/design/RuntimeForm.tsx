@@ -10,7 +10,12 @@ import {
 } from "@/app/actions/screen-runtime";
 import { Window } from "@/components/design/Window";
 import { ScreenDot } from "@/components/design/ScreenDot";
-import { formatDuration, parseMeterReading, runtimeFromMeter } from "@/lib/runtime";
+import {
+  formatDuration,
+  parseMeterReading,
+  runtimeFromMeter,
+  type MeterReadings,
+} from "@/lib/runtime";
 import {
   FormField,
   inputClass,
@@ -27,6 +32,8 @@ export interface RuntimeInitialValues {
   yellow_runtime_min: number;
   yellow_breakdown_min: number;
   yellow_breakdown_reasons: string | null;
+  /** Saved audit readings, when the shift was entered by meter. */
+  meter?: MeterReadings;
 }
 
 interface RuntimeFormProps {
@@ -89,6 +96,8 @@ export function RuntimeForm({ phaseAgencyId, logId, initial }: RuntimeFormProps)
         runtimeMin={initial?.red_runtime_min}
         breakdownMin={initial?.red_breakdown_min}
         reasons={initial?.red_breakdown_reasons ?? ""}
+        meterOpen={initial?.meter?.red_open}
+        meterClose={initial?.meter?.red_close}
         errors={errors}
         pending={pending}
       />
@@ -100,6 +109,8 @@ export function RuntimeForm({ phaseAgencyId, logId, initial }: RuntimeFormProps)
         runtimeMin={initial?.yellow_runtime_min}
         breakdownMin={initial?.yellow_breakdown_min}
         reasons={initial?.yellow_breakdown_reasons ?? ""}
+        meterOpen={initial?.meter?.yellow_open}
+        meterClose={initial?.meter?.yellow_close}
         errors={errors}
         pending={pending}
       />
@@ -184,6 +195,8 @@ interface ScreenSectionProps {
   runtimeMin: number | undefined;
   breakdownMin: number | undefined;
   reasons: string;
+  meterOpen?: number | null;
+  meterClose?: number | null;
   errors: Record<string, string>;
   pending: boolean;
 }
@@ -195,12 +208,17 @@ function ScreenSection({
   runtimeMin,
   breakdownMin,
   reasons,
+  meterOpen,
+  meterClose,
   errors,
   pending,
 }: ScreenSectionProps) {
-  const [mode, setMode] = useState<"manual" | "meter">("manual");
-  const [open, setOpen] = useState("");
-  const [close, setClose] = useState("");
+  const hasSavedMeter = meterOpen != null && meterClose != null;
+  const [mode, setMode] = useState<"manual" | "meter">(
+    hasSavedMeter ? "meter" : "manual"
+  );
+  const [open, setOpen] = useState(hasSavedMeter ? String(meterOpen) : "");
+  const [close, setClose] = useState(hasSavedMeter ? String(meterClose) : "");
 
   const openParsed = parseMeterReading(open);
   const closeParsed = parseMeterReading(close);

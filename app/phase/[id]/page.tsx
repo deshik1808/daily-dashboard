@@ -23,6 +23,7 @@ import { ReplyButton } from "@/components/design/ReplyButton";
 import { AnimatedNumber } from "@/components/design/AnimatedNumber";
 import { EntryRow } from "@/components/design/EntryRow";
 import { RuntimeCard } from "@/components/design/RuntimeCard";
+import { getMeterReadings } from "@/lib/meter-readings";
 import { RuntimeRow } from "@/components/design/RuntimeRow";
 import { phaseToCode } from "@/lib/phase-codes";
 import { pctOfInward } from "@/lib/phase";
@@ -74,6 +75,10 @@ export default async function PhaseDetailPage({
   const runtimeLogs = hasRuntime ? await getRuntimeLogs(id, thirtyDaysAgo) : [];
   const runtimeSummary = hasRuntime ? summarizeRuntime(runtimeLogs ?? []) : null;
   const latestRuntimeShifts = (runtimeLogs ?? []).slice(0, 2);
+  const meterByLog = await getMeterReadings(
+    session?.role,
+    latestRuntimeShifts.flatMap((l) => (l.id ? [l.id] : []))
+  );
 
   const lossPct = pctOfInward(phase.balance_mt, phase.cumulative_inward_mt);
   const canAddEntry = canWriteAgency(session, phase.agency ?? "");
@@ -155,6 +160,7 @@ export default async function PhaseDetailPage({
                 <RuntimeRow
                   key={log.id}
                   log={log}
+                  meter={log.id ? meterByLog[log.id] : undefined}
                   canEdit={canEditRecord(session, {
                     agency: phase.agency ?? "",
                     created_by: log.created_by,

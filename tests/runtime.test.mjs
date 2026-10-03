@@ -231,3 +231,28 @@ test("meter mode computes runtime from closing minus opening", () => {
   const missing = validateRuntimeLog({ ...base, red_meter_close: "" }, "2026-10-02");
   assert.ok(missing.errors.red_meter_close);
 });
+
+test("validation returns raw meter readings only for meter-mode screens", () => {
+  const res = validateRuntimeLog(
+    {
+      log_date: "2026-10-01",
+      shift: "Day",
+      red_mode: "meter",
+      red_meter_open: "1000",
+      red_meter_close: "1012",
+      yellow_runtime_h: "10",
+      yellow_runtime_m: "0",
+      yellow_breakdown_h: "2",
+      yellow_breakdown_m: "0",
+      yellow_breakdown_reasons: "Idle",
+    },
+    "2026-10-02"
+  );
+  assert.equal(res.valid, true);
+  assert.deepEqual(res.meter, {
+    red_open: 1000,
+    red_close: 1012,
+    yellow_open: null,
+    yellow_close: null,
+  });
+});

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { canEditRecord } from "@/lib/access";
+import { getMeterReadings } from "@/lib/meter-readings";
 import { TopBar } from "@/components/design/TopBar";
 import { Window } from "@/components/design/Window";
 import { RuntimeForm } from "@/components/design/RuntimeForm";
@@ -45,6 +46,8 @@ export default async function EditRuntimePage({
     redirect(`/phase/${log.phase_agency_id}`);
   }
 
+  const meter = (await getMeterReadings(session.role, [id]))[id];
+
   const boundDelete = deleteRuntimeLog.bind(null, id, log.phase_agency_id);
 
   return (
@@ -66,6 +69,7 @@ export default async function EditRuntimePage({
             yellow_runtime_min: log.yellow_runtime_min,
             yellow_breakdown_min: log.yellow_breakdown_min,
             yellow_breakdown_reasons: log.yellow_breakdown_reasons,
+            meter,
           }}
         />
 

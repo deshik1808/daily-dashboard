@@ -9,6 +9,7 @@ import { TopBar } from "@/components/design/TopBar";
 import { BottomNav } from "@/components/design/BottomNav";
 import { Window } from "@/components/design/Window";
 import { RuntimeSummaryTable } from "@/components/design/RuntimeSummary";
+import { getMeterReadings } from "@/lib/meter-readings";
 import { RuntimeRow } from "@/components/design/RuntimeRow";
 import { ReplyButton } from "@/components/design/ReplyButton";
 
@@ -44,6 +45,10 @@ export default async function FullRuntimePage({
 
   const canAdd = canWriteAgency(session, phase.agency ?? "");
   const summary = summarizeRuntime(logs ?? []);
+  const meterByLog = await getMeterReadings(
+    session?.role,
+    (logs ?? []).flatMap((l) => (l.id ? [l.id] : []))
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -97,6 +102,7 @@ export default async function FullRuntimePage({
               <RuntimeRow
                 key={log.id}
                 log={log}
+                meter={log.id ? meterByLog[log.id] : undefined}
                 canEdit={canEditRecord(session, {
                   agency: phase.agency ?? "",
                   created_by: log.created_by,
