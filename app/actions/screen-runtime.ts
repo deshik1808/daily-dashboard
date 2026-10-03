@@ -42,11 +42,17 @@ function readRuntimeForm(formData: FormData): Record<string, unknown> {
     red_breakdown_h: formData.get("red_breakdown_h"),
     red_breakdown_m: formData.get("red_breakdown_m"),
     red_breakdown_reasons: formData.get("red_breakdown_reasons"),
+    red_mode: formData.get("red_mode"),
+    red_meter_open: formData.get("red_meter_open"),
+    red_meter_close: formData.get("red_meter_close"),
     yellow_runtime_h: formData.get("yellow_runtime_h"),
     yellow_runtime_m: formData.get("yellow_runtime_m"),
     yellow_breakdown_h: formData.get("yellow_breakdown_h"),
     yellow_breakdown_m: formData.get("yellow_breakdown_m"),
     yellow_breakdown_reasons: formData.get("yellow_breakdown_reasons"),
+    yellow_mode: formData.get("yellow_mode"),
+    yellow_meter_open: formData.get("yellow_meter_open"),
+    yellow_meter_close: formData.get("yellow_meter_close"),
   };
 }
 

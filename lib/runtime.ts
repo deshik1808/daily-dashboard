@@ -143,6 +143,42 @@ export function parseMinutes(
   return { ok: true, value: num };
 }
 
+export const SHIFT_MINUTES = 720;
+
+/**
+ * Parses an hour-meter reading: blank, or a non-negative number with up to
+ * 2 decimals (e.g. "1234", "1234.5"). Returns null for blank.
+ */
+export function parseMeterReading(
+  raw: unknown
+): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (raw === null || raw === undefined) return { ok: true, value: null };
+  const str = String(raw).trim();
+  if (str === "") return { ok: true, value: null };
+  if (!/^\d+(\.\d{1,2})?$/.test(str)) {
+    return { ok: false, error: "Enter a reading like 1234.5" };
+  }
+  return { ok: true, value: Number(str) };
+}
+
+/**
+ * Runtime in whole minutes from opening/closing hour-meter readings
+ * (meter counts decimal hours). Breakdown is the rest of the 12 h shift.
+ */
+export function runtimeFromMeter(
+  opening: number,
+  closing: number
+): { runtimeMin: number; breakdownMin: number } | { error: string } {
+  if (closing < opening) {
+    return { error: "Closing reading can't be less than opening" };
+  }
+  const runtimeMin = Math.round((closing - opening) * 60);
+  if (runtimeMin > SHIFT_MINUTES) {
+    return { error: "Closing minus opening can't be more than 12 h" };
+  }
+  return { runtimeMin, breakdownMin: SHIFT_MINUTES - runtimeMin };
+}
+
 /** Validates runtime log input for both screens. */
 export function validateRuntimeLog(
   raw: Record<string, unknown>,
@@ -167,6 +203,47 @@ export function validateRuntimeLog(
 
   // Screens validation helper
   function validateScreen(prefix: "red" | "yellow") {
+    const rawReasonsInput = raw[`${prefix}_breakdown_reasons`];
+    let reasonsFromInput: string | null = null;
+    if (typeof rawReasonsInput === "string" && rawReasonsInput.trim()) {
+      reasonsFromInput = rawReasonsInput.trim();
+    }
+
+    if (raw[`${prefix}_mode`] === "meter") {
+      const openParsed = parseMeterReading(raw[`${prefix}_meter_open`]);
+      const closeParsed = parseMeterReading(raw[`${prefix}_meter_close`]);
+      if (!openParsed.ok) errors[`${prefix}_meter_open`] = openParsed.error;
+      if (!closeParsed.ok) errors[`${prefix}_meter_close`] = closeParsed.error;
+      if (openParsed.ok && openParsed.value === null) {
+        errors[`${prefix}_meter_open`] = "Enter the opening reading";
+      }
+      if (closeParsed.ok && closeParsed.value === null) {
+        errors[`${prefix}_meter_close`] = "Enter the closing reading";
+      }
+
+      let runtimeMin = 0;
+      let breakdownMin = 0;
+      if (
+        openParsed.ok &&
+        closeParsed.ok &&
+        openParsed.value !== null &&
+        closeParsed.value !== null
+      ) {
+        const calc = runtimeFromMeter(openParsed.value, closeParsed.value);
+        if ("error" in calc) {
+          errors[`${prefix}_meter_close`] = calc.error;
+        } else {
+          runtimeMin = calc.runtimeMin;
+          breakdownMin = calc.breakdownMin;
+        }
+      }
+
+      if (breakdownMin > 0 && !reasonsFromInput) {
+        errors[`${prefix}_breakdown_reasons`] = "Add a reason for the breakdown";
+      }
+      return { runtimeMin, breakdownMin, reasons: reasonsFromInput };
+    }
+
     const rawRunH = raw[`${prefix}_runtime_h`];
     const rawRunM = raw[`${prefix}_runtime_m`];
     const rawBdH = raw[`${prefix}_breakdown_h`];

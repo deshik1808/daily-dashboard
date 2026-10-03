@@ -194,3 +194,40 @@ test("validateRuntimeLog rejects future dates", () => {
   assert.equal(res.valid, false);
   assert.equal(res.errors?.log_date, "Date cannot be in the future");
 });
+
+test("meter mode computes runtime from closing minus opening", () => {
+  const base = {
+    log_date: "2026-10-01",
+    shift: "Day",
+    red_mode: "meter",
+    red_meter_open: "1000",
+    red_meter_close: "1009.5",
+    red_breakdown_reasons: "Belt cut",
+    yellow_runtime_h: "12",
+    yellow_runtime_m: "0",
+  };
+  const res = validateRuntimeLog(base, "2026-10-02");
+  assert.equal(res.valid, true);
+  assert.equal(res.value.red_runtime_min, 570);
+  assert.equal(res.value.red_breakdown_min, 150);
+
+  const noReason = validateRuntimeLog({ ...base, red_breakdown_reasons: "" }, "2026-10-02");
+  assert.equal(noReason.valid, false);
+  assert.ok(noReason.errors.red_breakdown_reasons);
+
+  const full = validateRuntimeLog(
+    { ...base, red_meter_close: "1012", red_breakdown_reasons: "" },
+    "2026-10-02"
+  );
+  assert.equal(full.valid, true);
+  assert.equal(full.value.red_breakdown_min, 0);
+
+  const backwards = validateRuntimeLog({ ...base, red_meter_close: "999" }, "2026-10-02");
+  assert.ok(backwards.errors.red_meter_close);
+
+  const tooLong = validateRuntimeLog({ ...base, red_meter_close: "1013" }, "2026-10-02");
+  assert.ok(tooLong.errors.red_meter_close);
+
+  const missing = validateRuntimeLog({ ...base, red_meter_close: "" }, "2026-10-02");
+  assert.ok(missing.errors.red_meter_close);
+});

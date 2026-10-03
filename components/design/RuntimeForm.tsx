@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   createRuntimeLog,
   updateRuntimeLog,
@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/screen-runtime";
 import { Window } from "@/components/design/Window";
 import { ScreenDot } from "@/components/design/ScreenDot";
+import { formatDuration, parseMeterReading, runtimeFromMeter } from "@/lib/runtime";
 import {
   FormField,
   inputClass,
@@ -43,32 +44,6 @@ export function RuntimeForm({ phaseAgencyId, logId, initial }: RuntimeFormProps)
 
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
   const errors = state?.errors ?? {};
-
-  const initRedRunH =
-    initial !== undefined ? Math.floor(initial.red_runtime_min / 60) : "";
-  const initRedRunM =
-    initial !== undefined ? initial.red_runtime_min % 60 : "";
-  const initRedBdH =
-    initial !== undefined && initial.red_breakdown_min > 0
-      ? Math.floor(initial.red_breakdown_min / 60)
-      : "";
-  const initRedBdM =
-    initial !== undefined && initial.red_breakdown_min > 0
-      ? initial.red_breakdown_min % 60
-      : "";
-
-  const initYellowRunH =
-    initial !== undefined ? Math.floor(initial.yellow_runtime_min / 60) : "";
-  const initYellowRunM =
-    initial !== undefined ? initial.yellow_runtime_min % 60 : "";
-  const initYellowBdH =
-    initial !== undefined && initial.yellow_breakdown_min > 0
-      ? Math.floor(initial.yellow_breakdown_min / 60)
-      : "";
-  const initYellowBdM =
-    initial !== undefined && initial.yellow_breakdown_min > 0
-      ? initial.yellow_breakdown_min % 60
-      : "";
 
   return (
     <form action={formAction} className="space-y-3 font-mono">
@@ -107,245 +82,27 @@ export function RuntimeForm({ phaseAgencyId, logId, initial }: RuntimeFormProps)
         </div>
       </Window>
 
-      {/* Red Screen */}
-      <Window
-        title={
-          <span className="flex items-center gap-1.5 font-bold">
-            <ScreenDot screen="red" />
-            RED SCREEN
-          </span>
-        }
-      >
-        <div className="space-y-3">
-          {/* Runtime */}
-          <div>
-            <span className="block text-[10px] font-bold text-muted">RUNTIME</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="red_runtime_h"
-                name="red_runtime_h"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="12"
-                placeholder="0"
-                defaultValue={initRedRunH}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">h</span>
-              <input
-                id="red_runtime_m"
-                name="red_runtime_m"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="59"
-                placeholder="0"
-                defaultValue={initRedRunM}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">m</span>
-            </div>
-            {errors.red_runtime && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.red_runtime}
-              </p>
-            )}
-            {errors.red_runtime_h && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.red_runtime_h}
-              </p>
-            )}
-            {errors.red_runtime_m && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.red_runtime_m}
-              </p>
-            )}
-          </div>
+      <ScreenSection
+        screen="red"
+        title="RED SCREEN"
+        reasonsPlaceholder="e.g. Belt cut 55 min, power cut 20 min"
+        runtimeMin={initial?.red_runtime_min}
+        breakdownMin={initial?.red_breakdown_min}
+        reasons={initial?.red_breakdown_reasons ?? ""}
+        errors={errors}
+        pending={pending}
+      />
 
-          {/* Breakdown */}
-          <div>
-            <span className="block text-[10px] font-bold text-muted">BREAKDOWN</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="red_breakdown_h"
-                name="red_breakdown_h"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="12"
-                placeholder="0"
-                defaultValue={initRedBdH}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">h</span>
-              <input
-                id="red_breakdown_m"
-                name="red_breakdown_m"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="59"
-                placeholder="0"
-                defaultValue={initRedBdM}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">m</span>
-            </div>
-            {errors.red_breakdown_h && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.red_breakdown_h}
-              </p>
-            )}
-            {errors.red_breakdown_m && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.red_breakdown_m}
-              </p>
-            )}
-          </div>
-
-          {/* Reasons */}
-          <FormField
-            id="red_breakdown_reasons"
-            label="REASONS"
-            error={errors.red_breakdown_reasons}
-          >
-            <input
-              id="red_breakdown_reasons"
-              name="red_breakdown_reasons"
-              type="text"
-              placeholder="e.g. Belt cut 55 min, power cut 20 min"
-              defaultValue={initial?.red_breakdown_reasons ?? ""}
-              disabled={pending}
-              className={`${inputClass} font-sans`}
-            />
-          </FormField>
-        </div>
-      </Window>
-
-      {/* Yellow Screen */}
-      <Window
-        title={
-          <span className="flex items-center gap-1.5 font-bold">
-            <ScreenDot screen="yellow" />
-            YELLOW SCREEN
-          </span>
-        }
-      >
-        <div className="space-y-3">
-          {/* Runtime */}
-          <div>
-            <span className="block text-[10px] font-bold text-muted">RUNTIME</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="yellow_runtime_h"
-                name="yellow_runtime_h"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="12"
-                placeholder="0"
-                defaultValue={initYellowRunH}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">h</span>
-              <input
-                id="yellow_runtime_m"
-                name="yellow_runtime_m"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="59"
-                placeholder="0"
-                defaultValue={initYellowRunM}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">m</span>
-            </div>
-            {errors.yellow_runtime && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.yellow_runtime}
-              </p>
-            )}
-            {errors.yellow_runtime_h && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.yellow_runtime_h}
-              </p>
-            )}
-            {errors.yellow_runtime_m && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.yellow_runtime_m}
-              </p>
-            )}
-          </div>
-
-          {/* Breakdown */}
-          <div>
-            <span className="block text-[10px] font-bold text-muted">BREAKDOWN</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="yellow_breakdown_h"
-                name="yellow_breakdown_h"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="12"
-                placeholder="0"
-                defaultValue={initYellowBdH}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">h</span>
-              <input
-                id="yellow_breakdown_m"
-                name="yellow_breakdown_m"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="59"
-                placeholder="0"
-                defaultValue={initYellowBdM}
-                disabled={pending}
-                className="w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm"
-              />
-              <span className="text-xs text-muted">m</span>
-            </div>
-            {errors.yellow_breakdown_h && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.yellow_breakdown_h}
-              </p>
-            )}
-            {errors.yellow_breakdown_m && (
-              <p role="alert" className="mt-1 text-[10px] text-alert">
-                {errors.yellow_breakdown_m}
-              </p>
-            )}
-          </div>
-
-          {/* Reasons */}
-          <FormField
-            id="yellow_breakdown_reasons"
-            label="REASONS"
-            error={errors.yellow_breakdown_reasons}
-          >
-            <input
-              id="yellow_breakdown_reasons"
-              name="yellow_breakdown_reasons"
-              type="text"
-              placeholder="e.g. Idle, no material"
-              defaultValue={initial?.yellow_breakdown_reasons ?? ""}
-              disabled={pending}
-              className={`${inputClass} font-sans`}
-            />
-          </FormField>
-        </div>
-      </Window>
+      <ScreenSection
+        screen="yellow"
+        title="YELLOW SCREEN"
+        reasonsPlaceholder="e.g. Idle, no material"
+        runtimeMin={initial?.yellow_runtime_min}
+        breakdownMin={initial?.yellow_breakdown_min}
+        reasons={initial?.yellow_breakdown_reasons ?? ""}
+        errors={errors}
+        pending={pending}
+      />
 
       {state?.error && (
         <p role="alert" className="text-xs text-alert">
@@ -362,5 +119,233 @@ export function RuntimeForm({ phaseAgencyId, logId, initial }: RuntimeFormProps)
         </Link>
       </div>
     </form>
+  );
+}
+
+const smallInput =
+  "w-16 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm";
+const meterInput =
+  "w-28 min-h-[44px] rounded-control border border-ink bg-paper px-2 py-1.5 text-center text-sm";
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="mt-1 text-[10px] text-alert">
+      {message}
+    </p>
+  );
+}
+
+interface HmInputsProps {
+  name: string;
+  defaultMin: number | undefined;
+  blankZero?: boolean;
+  disabled: boolean;
+}
+
+function HmInputs({ name, defaultMin, blankZero, disabled }: HmInputsProps) {
+  const blank = defaultMin === undefined || (blankZero && defaultMin === 0);
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <input
+        id={`${name}_h`}
+        name={`${name}_h`}
+        type="number"
+        inputMode="numeric"
+        min="0"
+        max="12"
+        placeholder="0"
+        defaultValue={blank ? "" : Math.floor(defaultMin / 60)}
+        disabled={disabled}
+        className={smallInput}
+      />
+      <span className="text-xs text-muted">h</span>
+      <input
+        id={`${name}_m`}
+        name={`${name}_m`}
+        type="number"
+        inputMode="numeric"
+        min="0"
+        max="59"
+        placeholder="0"
+        defaultValue={blank ? "" : defaultMin % 60}
+        disabled={disabled}
+        className={smallInput}
+      />
+      <span className="text-xs text-muted">m</span>
+    </div>
+  );
+}
+
+interface ScreenSectionProps {
+  screen: "red" | "yellow";
+  title: string;
+  reasonsPlaceholder: string;
+  runtimeMin: number | undefined;
+  breakdownMin: number | undefined;
+  reasons: string;
+  errors: Record<string, string>;
+  pending: boolean;
+}
+
+function ScreenSection({
+  screen,
+  title,
+  reasonsPlaceholder,
+  runtimeMin,
+  breakdownMin,
+  reasons,
+  errors,
+  pending,
+}: ScreenSectionProps) {
+  const [mode, setMode] = useState<"manual" | "meter">("manual");
+  const [open, setOpen] = useState("");
+  const [close, setClose] = useState("");
+
+  const openParsed = parseMeterReading(open);
+  const closeParsed = parseMeterReading(close);
+  const calc =
+    openParsed.ok &&
+    closeParsed.ok &&
+    openParsed.value !== null &&
+    closeParsed.value !== null
+      ? runtimeFromMeter(openParsed.value, closeParsed.value)
+      : null;
+
+  return (
+    <Window
+      title={
+        <span className="flex items-center gap-1.5 font-bold">
+          <ScreenDot screen={screen} />
+          {title}
+        </span>
+      }
+    >
+      <div className="space-y-3">
+        <input type="hidden" name={`${screen}_mode`} value={mode} />
+
+        <div className="flex gap-2" role="group" aria-label="Entry method">
+          {(["manual", "meter"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              disabled={pending}
+              aria-pressed={mode === m}
+              className={`min-h-[36px] flex-1 rounded-control border border-ink px-2 text-[10px] font-bold ${
+                mode === m ? "bg-ink text-paper" : "bg-paper text-muted"
+              }`}
+            >
+              {m === "manual" ? "ENTER HOURS" : "METER READING"}
+            </button>
+          ))}
+        </div>
+
+        {mode === "meter" ? (
+          <div>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label
+                  htmlFor={`${screen}_meter_open`}
+                  className="block text-[10px] font-bold text-muted"
+                >
+                  OPENING
+                </label>
+                <input
+                  id={`${screen}_meter_open`}
+                  name={`${screen}_meter_open`}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="1000.0"
+                  value={open}
+                  onChange={(e) => setOpen(e.target.value)}
+                  disabled={pending}
+                  className={`mt-1 ${meterInput}`}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor={`${screen}_meter_close`}
+                  className="block text-[10px] font-bold text-muted"
+                >
+                  CLOSING
+                </label>
+                <input
+                  id={`${screen}_meter_close`}
+                  name={`${screen}_meter_close`}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="1009.5"
+                  value={close}
+                  onChange={(e) => setClose(e.target.value)}
+                  disabled={pending}
+                  className={`mt-1 ${meterInput}`}
+                />
+              </div>
+            </div>
+            <FieldError message={errors[`${screen}_meter_open`]} />
+            <FieldError message={errors[`${screen}_meter_close`]} />
+            <p className="mt-2 text-[10px] text-muted">
+              {calc && !("error" in calc) ? (
+                <>
+                  Runtime{" "}
+                  <span className="font-bold text-ink">
+                    {formatDuration(calc.runtimeMin)}
+                  </span>
+                  {" · "}Breakdown{" "}
+                  <span className="font-bold text-ink">
+                    {formatDuration(calc.breakdownMin)}
+                  </span>{" "}
+                  (rest of 12 h shift)
+                </>
+              ) : (
+                "Hour-meter readings in hours (e.g. 1009.5). Breakdown = 12 h minus runtime."
+              )}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div>
+              <span className="block text-[10px] font-bold text-muted">RUNTIME</span>
+              <HmInputs
+                name={`${screen}_runtime`}
+                defaultMin={runtimeMin}
+                disabled={pending}
+              />
+              <FieldError message={errors[`${screen}_runtime`]} />
+              <FieldError message={errors[`${screen}_runtime_h`]} />
+              <FieldError message={errors[`${screen}_runtime_m`]} />
+            </div>
+            <div>
+              <span className="block text-[10px] font-bold text-muted">BREAKDOWN</span>
+              <HmInputs
+                name={`${screen}_breakdown`}
+                defaultMin={breakdownMin}
+                blankZero
+                disabled={pending}
+              />
+              <FieldError message={errors[`${screen}_breakdown_h`]} />
+              <FieldError message={errors[`${screen}_breakdown_m`]} />
+            </div>
+          </>
+        )}
+
+        <FormField
+          id={`${screen}_breakdown_reasons`}
+          label="REASONS"
+          error={errors[`${screen}_breakdown_reasons`]}
+        >
+          <input
+            id={`${screen}_breakdown_reasons`}
+            name={`${screen}_breakdown_reasons`}
+            type="text"
+            placeholder={reasonsPlaceholder}
+            defaultValue={reasons}
+            disabled={pending}
+            className={`${inputClass} font-sans`}
+          />
+        </FormField>
+      </div>
+    </Window>
   );
 }
