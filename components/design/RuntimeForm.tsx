@@ -246,7 +246,7 @@ function ScreenSection({
         <input type="hidden" name={`${screen}_mode`} value={mode} />
 
         <div className="flex gap-2" role="group" aria-label="Entry method">
-          {(["manual", "meter"] as const).map((m) => (
+          {(["meter", "manual"] as const).map((m) => (
             <button
               key={m}
               type="button"
