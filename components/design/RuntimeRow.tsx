@@ -17,7 +17,9 @@ function formatDate(dateStr: string) {
 
 function Remark({ text }: { text: string }) {
   return (
-    <p className="mt-0.5 pl-3.5 text-[11px] leading-snug text-muted">{text}</p>
+    <p className="mt-0.5 whitespace-pre-line pl-3.5 text-[11px] leading-snug text-muted">
+      {text}
+    </p>
   );
 }
 

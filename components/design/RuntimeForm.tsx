@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/screen-runtime";
 import { Window } from "@/components/design/Window";
 import { ScreenDot } from "@/components/design/ScreenDot";
+import { BulletTextarea } from "@/components/design/BulletTextarea";
 import {
   formatDuration,
   parseMeterReading,
@@ -214,8 +215,10 @@ function ScreenSection({
   pending,
 }: ScreenSectionProps) {
   const hasSavedMeter = meterOpen != null && meterClose != null;
+  // Meter reading is the default; only a log saved with typed-in hours reopens as manual.
+  const hasSavedHours = runtimeMin !== undefined;
   const [mode, setMode] = useState<"manual" | "meter">(
-    hasSavedMeter ? "meter" : "manual"
+    hasSavedMeter || !hasSavedHours ? "meter" : "manual"
   );
   const [open, setOpen] = useState(hasSavedMeter ? String(meterOpen) : "");
   const [close, setClose] = useState(hasSavedMeter ? String(meterClose) : "");
@@ -353,14 +356,14 @@ function ScreenSection({
           label="REASONS"
           error={errors[`${screen}_breakdown_reasons`]}
         >
-          <input
+          <BulletTextarea
             id={`${screen}_breakdown_reasons`}
             name={`${screen}_breakdown_reasons`}
-            type="text"
-            placeholder={reasonsPlaceholder}
+            rows={3}
+            placeholder={`${reasonsPlaceholder} (type - for bullet points)`}
             defaultValue={reasons}
             disabled={pending}
-            className={`${inputClass} font-sans`}
+            className={`${inputClass} font-sans text-[13px]`}
           />
         </FormField>
       </div>
