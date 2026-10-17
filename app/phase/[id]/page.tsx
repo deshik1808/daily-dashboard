@@ -144,7 +144,15 @@ export default async function PhaseDetailPage({
         )}
 
         <Window title="MATERIAL BREAKDOWN">
-          <MaterialTable rows={(materials ?? []) as MaterialRow[]} />
+          <MaterialTable
+            rows={(materials ?? []) as MaterialRow[]}
+            // Card Box Phase III reports Inert (incl. C&D) instead of Stones
+            primary={
+              phase.agency === "Card Box" && phase.phase === "III"
+                ? ["Soil", "RDF", "Inert"]
+                : undefined
+            }
+          />
         </Window>
 
         {hasRuntime && (

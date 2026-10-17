@@ -5,12 +5,20 @@ import { AnimatedNumber } from "./AnimatedNumber";
 
 export type MaterialRow = { material: string; disposed_mt: number; share_pct: number };
 
-const PRIMARY = ["Soil", "RDF", "Stones"];
+const DEFAULT_PRIMARY = ["Soil", "RDF", "Stones"];
+// Kept out of the Others breakdown unless shown as a primary row.
+const HIDEABLE = ["Inert", "Stones", "Others"];
 
-export function MaterialTable({ rows }: { rows: MaterialRow[] }) {
+export function MaterialTable({
+  rows,
+  primary: PRIMARY = DEFAULT_PRIMARY,
+}: {
+  rows: MaterialRow[];
+  primary?: string[];
+}) {
   const [expanded, setExpanded] = useState(false);
 
-  const HIDDEN = ["Inert", "Others"];
+  const HIDDEN = HIDEABLE.filter((m) => !PRIMARY.includes(m));
 
   const primaryRows = PRIMARY.map(
     (name) => rows.find((r) => r.material === name) ?? { material: name, disposed_mt: 0, share_pct: 0 }
