@@ -8,12 +8,14 @@ const MATERIAL_LABELS = {
   soil_mt: "Soil",
   rdf_mt: "RDF",
   stones_mt: "Stones",
+  inert_mt: "Inert",
   steel_mt: "Steel",
   tyre_mt: "Tyre",
   wood_mt: "Wood",
   glass_mt: "Glass",
   iron_scrap_mt: "Iron Scrap",
   wires_cables_mt: "Wires & Cables",
+  others_mt: "Others",
 } as const;
 
 type MaterialKey = keyof typeof MATERIAL_LABELS;
