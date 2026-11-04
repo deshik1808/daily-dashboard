@@ -24,11 +24,36 @@ function Remark({ text }: { text: string }) {
 }
 
 function MeterLine({ open, close }: { open: number | null; close: number | null }) {
-  if (open === null || close === null) return null;
+  if (open === null) return null;
   return (
     <p className="mt-0.5 pl-3.5 text-[10px] text-muted">
-      meter {open} → {close}
+      meter {open} → {close ?? "…"}
     </p>
+  );
+}
+
+function Figures({
+  runMin,
+  breakdownMin,
+}: {
+  runMin: number;
+  breakdownMin: number | null;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span>
+        <span className="text-muted">run </span>
+        <span className="font-bold">{formatDuration(runMin)}</span>
+      </span>
+      <span>
+        <span className="text-muted">breakdown </span>
+        {breakdownMin ? (
+          <span className="font-bold text-accent-ink">{formatDuration(breakdownMin)}</span>
+        ) : (
+          <span className="text-muted">—</span>
+        )}
+      </span>
+    </div>
   );
 }
 
@@ -67,54 +92,33 @@ export function RuntimeRow({
               <ScreenDot screen="red" size="sm" />
               RED
             </span>
-            <div className="flex items-center gap-3">
-              <span>
-                <span className="text-muted">run </span>
-                <span className="font-bold">{formatDuration(log.red_runtime_min)}</span>
-              </span>
-              <span>
-                <span className="text-muted">breakdown </span>
-                {log.red_breakdown_min > 0 ? (
-                  <span className="font-bold text-accent-ink">
-                    {formatDuration(log.red_breakdown_min)}
-                  </span>
-                ) : (
-                  <span className="text-muted">—</span>
-                )}
-              </span>
-            </div>
+            {log.red_runtime_min === null ? (
+              <span className="font-bold text-accent-ink">AWAITING CLOSING</span>
+            ) : (
+              <Figures runMin={log.red_runtime_min} breakdownMin={log.red_breakdown_min} />
+            )}
           </div>
           {log.red_breakdown_reasons && <Remark text={log.red_breakdown_reasons} />}
           {meter && <MeterLine open={meter.red_open} close={meter.red_close} />}
         </div>
 
-        {/* Yellow Screen */}
-        <div>
-          <div className="flex flex-wrap items-center justify-between gap-x-2">
-            <span className="flex items-center gap-1.5 font-bold">
-              <ScreenDot screen="yellow" size="sm" />
-              YELLOW
-            </span>
-            <div className="flex items-center gap-3">
-              <span>
-                <span className="text-muted">run </span>
-                <span className="font-bold">{formatDuration(log.yellow_runtime_min)}</span>
+        {/* Yellow Screen: left the site; shown only on shifts logged while it was there. */}
+        {log.yellow_runtime_min != null && (
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-x-2">
+              <span className="flex items-center gap-1.5 font-bold">
+                <ScreenDot screen="yellow" size="sm" />
+                YELLOW
               </span>
-              <span>
-                <span className="text-muted">breakdown </span>
-                {log.yellow_breakdown_min > 0 ? (
-                  <span className="font-bold text-accent-ink">
-                    {formatDuration(log.yellow_breakdown_min)}
-                  </span>
-                ) : (
-                  <span className="text-muted">—</span>
-                )}
-              </span>
+              <Figures
+                runMin={log.yellow_runtime_min}
+                breakdownMin={log.yellow_breakdown_min ?? null}
+              />
             </div>
+            {log.yellow_breakdown_reasons && <Remark text={log.yellow_breakdown_reasons} />}
+            {meter && <MeterLine open={meter.yellow_open} close={meter.yellow_close} />}
           </div>
-          {log.yellow_breakdown_reasons && <Remark text={log.yellow_breakdown_reasons} />}
-          {meter && <MeterLine open={meter.yellow_open} close={meter.yellow_close} />}
-        </div>
+        )}
       </div>
     </div>
   );

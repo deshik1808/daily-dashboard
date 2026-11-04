@@ -14,25 +14,25 @@ export interface ScreenRuntimeLog {
   phase_agency_id?: string;
   log_date: string;
   shift: RuntimeShift;
-  red_runtime_min: number;
-  red_breakdown_min: number;
+  /** Null while the shift is open: only the opening meter reading is saved. */
+  red_runtime_min: number | null;
+  red_breakdown_min: number | null;
   red_breakdown_reasons?: string | null;
-  yellow_runtime_min: number;
-  yellow_breakdown_min: number;
+  /** The yellow screen has left the site: null on every row logged since. */
+  yellow_runtime_min?: number | null;
+  yellow_breakdown_min?: number | null;
   yellow_breakdown_reasons?: string | null;
   created_by?: string;
   created_at?: string;
 }
 
+/** Red screen only; the yellow columns are never written by the app any more. */
 export interface RuntimeLogValues {
   log_date: string;
   shift: RuntimeShift;
-  red_runtime_min: number;
-  red_breakdown_min: number;
+  red_runtime_min: number | null;
+  red_breakdown_min: number | null;
   red_breakdown_reasons: string | null;
-  yellow_runtime_min: number;
-  yellow_breakdown_min: number;
-  yellow_breakdown_reasons: string | null;
 }
 
 /** Raw hour-meter readings for audit; null for a screen entered manually. */
@@ -43,23 +43,31 @@ export interface MeterReadings {
   yellow_close: number | null;
 }
 
+/** What the form can write: yellow readings stay only on rows logged earlier. */
+export interface RedMeterReadings {
+  red_open: number | null;
+  red_close: number | null;
+}
+
 export interface RuntimeValidationResult {
   valid: boolean;
   value?: RuntimeLogValues;
-  meter?: MeterReadings;
+  meter?: RedMeterReadings;
   errors?: Record<string, string>;
 }
 
 export interface RuntimeSummary {
+  /** Completed shifts: open shifts (no closing reading yet) are not counted. */
   shifts: number;
   red: {
     avgRunMin: number;
     avgBreakdownMin: number;
   };
+  /** Null when none of the shifts in range carry yellow data. */
   yellow: {
     avgRunMin: number;
     avgBreakdownMin: number;
-  };
+  } | null;
 }
 
 /** Formats whole minutes into "9 h 30 m", "11 h 00 m", "22 m", or "0 m". */
@@ -77,38 +85,34 @@ export function formatDuration(min: number): string {
 }
 
 /**
- * Computes average runtime and breakdown for Red and Yellow screens across shift rows.
- * Returns null if rows is empty.
+ * Computes average runtime and breakdown across completed shift rows. Open shifts
+ * are skipped; yellow averages cover only rows that still carry yellow data.
+ * Returns null if no shift is completed.
  */
 export function summarizeRuntime(
-  rows: ScreenRuntimeLog[]
+  rows: ScreenRuntimeLog[] | null | undefined
 ): RuntimeSummary | null {
-  if (!rows || rows.length === 0) return null;
+  const done = (rows ?? []).filter((r) => r.red_runtime_min != null);
+  if (done.length === 0) return null;
 
-  let totalRedRun = 0;
-  let totalRedBreakdown = 0;
-  let totalYellowRun = 0;
-  let totalYellowBreakdown = 0;
+  const avg = (values: number[]) =>
+    Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
 
-  for (const row of rows) {
-    totalRedRun += row.red_runtime_min;
-    totalRedBreakdown += row.red_breakdown_min;
-    totalYellowRun += row.yellow_runtime_min;
-    totalYellowBreakdown += row.yellow_breakdown_min;
-  }
-
-  const count = rows.length;
+  const yellowRows = done.filter((r) => r.yellow_runtime_min != null);
 
   return {
-    shifts: count,
+    shifts: done.length,
     red: {
-      avgRunMin: Math.round(totalRedRun / count),
-      avgBreakdownMin: Math.round(totalRedBreakdown / count),
+      avgRunMin: avg(done.map((r) => r.red_runtime_min ?? 0)),
+      avgBreakdownMin: avg(done.map((r) => r.red_breakdown_min ?? 0)),
     },
-    yellow: {
-      avgRunMin: Math.round(totalYellowRun / count),
-      avgBreakdownMin: Math.round(totalYellowBreakdown / count),
-    },
+    yellow:
+      yellowRows.length > 0
+        ? {
+            avgRunMin: avg(yellowRows.map((r) => r.yellow_runtime_min ?? 0)),
+            avgBreakdownMin: avg(yellowRows.map((r) => r.yellow_breakdown_min ?? 0)),
+          }
+        : null,
   };
 }
 
@@ -188,145 +192,120 @@ export function runtimeFromMeter(
   return { runtimeMin, breakdownMin: SHIFT_MINUTES - runtimeMin };
 }
 
-/** Validates runtime log input for both screens. */
+interface ScreenResult {
+  runtimeMin: number | null;
+  breakdownMin: number | null;
+  reasons: string | null;
+  meter: { open: number | null; close: number | null };
+}
+
+/** Validates the red screen section of a runtime log (the only screen on site). */
+function validateRedScreen(
+  raw: Record<string, unknown>,
+  errors: Record<string, string>
+): ScreenResult {
+  const rawReasons = raw.red_breakdown_reasons;
+  const reasons =
+    typeof rawReasons === "string" && rawReasons.trim() ? rawReasons.trim() : null;
+
+  if (raw.red_mode === "meter") {
+    const openParsed = parseMeterReading(raw.red_meter_open);
+    const closeParsed = parseMeterReading(raw.red_meter_close);
+    if (!openParsed.ok) errors.red_meter_open = openParsed.error;
+    if (!closeParsed.ok) errors.red_meter_close = closeParsed.error;
+    if (openParsed.ok && openParsed.value === null) {
+      errors.red_meter_open = "Enter the opening reading";
+    }
+
+    const open = openParsed.ok ? openParsed.value : null;
+    const close = closeParsed.ok ? closeParsed.value : null;
+
+    // Opening reading only: the shift stays open until the closing reading is added.
+    let runtimeMin: number | null = null;
+    let breakdownMin: number | null = null;
+    if (open !== null && close !== null) {
+      const calc = runtimeFromMeter(open, close);
+      if ("error" in calc) {
+        errors.red_meter_close = calc.error;
+      } else {
+        runtimeMin = calc.runtimeMin;
+        breakdownMin = calc.breakdownMin;
+        if (breakdownMin > 0 && !reasons) {
+          errors.red_breakdown_reasons = "Add a reason for the breakdown";
+        }
+      }
+    }
+
+    return { runtimeMin, breakdownMin, reasons, meter: { open, close } };
+  }
+
+  const runHParsed = parseHours(raw.red_runtime_h);
+  if (!runHParsed.ok) errors.red_runtime_h = runHParsed.error;
+
+  const runMParsed = parseMinutes(raw.red_runtime_m);
+  if (!runMParsed.ok) errors.red_runtime_m = runMParsed.error;
+
+  const bdHParsed = parseHours(raw.red_breakdown_h);
+  if (!bdHParsed.ok) errors.red_breakdown_h = bdHParsed.error;
+
+  const bdMParsed = parseMinutes(raw.red_breakdown_m);
+  if (!bdMParsed.ok) errors.red_breakdown_m = bdMParsed.error;
+
+  const runH = runHParsed.ok ? runHParsed.value : null;
+  const runM = runMParsed.ok ? runMParsed.value : null;
+  const bdH = bdHParsed.ok ? bdHParsed.value : null;
+  const bdM = bdMParsed.ok ? bdMParsed.value : null;
+
+  if (runHParsed.ok && runMParsed.ok && runH === null && runM === null) {
+    errors.red_runtime = "Enter the runtime (0 is fine)";
+  }
+
+  const runTotalMin = (runH ?? 0) * 60 + (runM ?? 0);
+  const bdTotalMin = (bdH ?? 0) * 60 + (bdM ?? 0);
+
+  if (
+    runHParsed.ok &&
+    runMParsed.ok &&
+    bdHParsed.ok &&
+    bdMParsed.ok &&
+    (runH !== null || runM !== null) &&
+    runTotalMin + bdTotalMin > SHIFT_MINUTES
+  ) {
+    errors.red_runtime = "Runtime + breakdown can't be more than 12 h";
+  }
+
+  if (bdTotalMin > 0 && !reasons) {
+    errors.red_breakdown_reasons = "Add a reason for the breakdown";
+  }
+
+  return {
+    runtimeMin: runTotalMin,
+    breakdownMin: bdTotalMin,
+    reasons,
+    meter: { open: null, close: null },
+  };
+}
+
+/** Validates runtime log input for the red screen. */
 export function validateRuntimeLog(
   raw: Record<string, unknown>,
   today: string
 ): RuntimeValidationResult {
   const errors: Record<string, string> = {};
 
-  // 1. Date
   const dateResult = validateReportDate(raw.log_date, today);
   if (!dateResult.ok) {
     errors.log_date = dateResult.error;
   }
 
-  // 2. Shift
-  const rawShift = raw.shift;
   let shift: RuntimeShift = "Day";
-  if (rawShift === "Day" || rawShift === "Night") {
-    shift = rawShift;
+  if (raw.shift === "Day" || raw.shift === "Night") {
+    shift = raw.shift;
   } else {
     errors.shift = "Select a shift";
   }
 
-  // Screens validation helper
-  function validateScreen(prefix: "red" | "yellow") {
-    const rawReasonsInput = raw[`${prefix}_breakdown_reasons`];
-    let reasonsFromInput: string | null = null;
-    if (typeof rawReasonsInput === "string" && rawReasonsInput.trim()) {
-      reasonsFromInput = rawReasonsInput.trim();
-    }
-
-    if (raw[`${prefix}_mode`] === "meter") {
-      const openParsed = parseMeterReading(raw[`${prefix}_meter_open`]);
-      const closeParsed = parseMeterReading(raw[`${prefix}_meter_close`]);
-      if (!openParsed.ok) errors[`${prefix}_meter_open`] = openParsed.error;
-      if (!closeParsed.ok) errors[`${prefix}_meter_close`] = closeParsed.error;
-      if (openParsed.ok && openParsed.value === null) {
-        errors[`${prefix}_meter_open`] = "Enter the opening reading";
-      }
-      if (closeParsed.ok && closeParsed.value === null) {
-        errors[`${prefix}_meter_close`] = "Enter the closing reading";
-      }
-
-      let runtimeMin = 0;
-      let breakdownMin = 0;
-      if (
-        openParsed.ok &&
-        closeParsed.ok &&
-        openParsed.value !== null &&
-        closeParsed.value !== null
-      ) {
-        const calc = runtimeFromMeter(openParsed.value, closeParsed.value);
-        if ("error" in calc) {
-          errors[`${prefix}_meter_close`] = calc.error;
-        } else {
-          runtimeMin = calc.runtimeMin;
-          breakdownMin = calc.breakdownMin;
-        }
-      }
-
-      if (breakdownMin > 0 && !reasonsFromInput) {
-        errors[`${prefix}_breakdown_reasons`] = "Add a reason for the breakdown";
-      }
-      return {
-        runtimeMin,
-        breakdownMin,
-        reasons: reasonsFromInput,
-        meter:
-          openParsed.ok && closeParsed.ok
-            ? { open: openParsed.value, close: closeParsed.value }
-            : { open: null, close: null },
-      };
-    }
-
-    const rawRunH = raw[`${prefix}_runtime_h`];
-    const rawRunM = raw[`${prefix}_runtime_m`];
-    const rawBdH = raw[`${prefix}_breakdown_h`];
-    const rawBdM = raw[`${prefix}_breakdown_m`];
-    const rawReasons = raw[`${prefix}_breakdown_reasons`];
-
-    const runHParsed = parseHours(rawRunH);
-    if (!runHParsed.ok) errors[`${prefix}_runtime_h`] = runHParsed.error;
-
-    const runMParsed = parseMinutes(rawRunM);
-    if (!runMParsed.ok) errors[`${prefix}_runtime_m`] = runMParsed.error;
-
-    const bdHParsed = parseHours(rawBdH);
-    if (!bdHParsed.ok) errors[`${prefix}_breakdown_h`] = bdHParsed.error;
-
-    const bdMParsed = parseMinutes(rawBdM);
-    if (!bdMParsed.ok) errors[`${prefix}_breakdown_m`] = bdMParsed.error;
-
-    const runH = runHParsed.ok ? runHParsed.value : null;
-    const runM = runMParsed.ok ? runMParsed.value : null;
-
-    if (runHParsed.ok && runMParsed.ok) {
-      if (runH === null && runM === null) {
-        errors[`${prefix}_runtime`] = "Enter the runtime (0 is fine)";
-      }
-    }
-
-    const bdH = bdHParsed.ok ? bdHParsed.value : null;
-    const bdM = bdMParsed.ok ? bdMParsed.value : null;
-
-    const runTotalMin = (runH ?? 0) * 60 + (runM ?? 0);
-    const bdTotalMin = (bdH ?? 0) * 60 + (bdM ?? 0);
-
-    if (
-      runHParsed.ok &&
-      runMParsed.ok &&
-      bdHParsed.ok &&
-      bdMParsed.ok &&
-      (runH !== null || runM !== null)
-    ) {
-      if (runTotalMin + bdTotalMin > 720) {
-        errors[`${prefix}_runtime`] =
-          "Runtime + breakdown can't be more than 12 h";
-      }
-    }
-
-    let reasons: string | null = null;
-    if (typeof rawReasons === "string") {
-      const trimmed = rawReasons.trim();
-      reasons = trimmed.length > 0 ? trimmed : null;
-    }
-
-    if (bdTotalMin > 0 && !reasons) {
-      errors[`${prefix}_breakdown_reasons`] = "Add a reason for the breakdown";
-    }
-
-    return {
-      runtimeMin: runTotalMin,
-      breakdownMin: bdTotalMin,
-      reasons,
-      meter: { open: null, close: null },
-    };
-  }
-
-  const red = validateScreen("red");
-  const yellow = validateScreen("yellow");
+  const red = validateRedScreen(raw, errors);
 
   if (Object.keys(errors).length > 0) {
     return { valid: false, errors };
@@ -334,21 +313,13 @@ export function validateRuntimeLog(
 
   return {
     valid: true,
-    meter: {
-      red_open: red.meter.open,
-      red_close: red.meter.close,
-      yellow_open: yellow.meter.open,
-      yellow_close: yellow.meter.close,
-    },
+    meter: { red_open: red.meter.open, red_close: red.meter.close },
     value: {
       log_date: dateResult.ok ? dateResult.value : "",
       shift,
       red_runtime_min: red.runtimeMin,
       red_breakdown_min: red.breakdownMin,
       red_breakdown_reasons: red.reasons,
-      yellow_runtime_min: yellow.runtimeMin,
-      yellow_breakdown_min: yellow.breakdownMin,
-      yellow_breakdown_reasons: yellow.reasons,
     },
   };
 }

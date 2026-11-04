@@ -46,22 +46,24 @@ export function RuntimeSummaryTable({
                   : "—"}
               </td>
             </tr>
-            <tr>
-              <td className="py-1.5 font-bold">
-                <span className="flex items-center gap-1.5">
-                  <ScreenDot screen="yellow" />
-                  YELLOW
-                </span>
-              </td>
-              <td className="py-1.5 text-right font-bold text-ink">
-                {formatDuration(summary.yellow.avgRunMin)}
-              </td>
-              <td className="py-1.5 text-right font-bold text-accent-ink">
-                {summary.yellow.avgBreakdownMin > 0
-                  ? formatDuration(summary.yellow.avgBreakdownMin)
-                  : "—"}
-              </td>
-            </tr>
+            {summary.yellow && (
+              <tr>
+                <td className="py-1.5 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <ScreenDot screen="yellow" />
+                    YELLOW
+                  </span>
+                </td>
+                <td className="py-1.5 text-right font-bold text-ink">
+                  {formatDuration(summary.yellow.avgRunMin)}
+                </td>
+                <td className="py-1.5 text-right font-bold text-accent-ink">
+                  {summary.yellow.avgBreakdownMin > 0
+                    ? formatDuration(summary.yellow.avgBreakdownMin)
+                    : "—"}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

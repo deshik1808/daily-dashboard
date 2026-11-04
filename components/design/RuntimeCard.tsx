@@ -19,7 +19,8 @@ export function RuntimeCard({
   const breakdownBits = summary
     ? [
         summary.red.avgBreakdownMin > 0 && `Red ${formatDuration(summary.red.avgBreakdownMin)}`,
-        summary.yellow.avgBreakdownMin > 0 &&
+        summary.yellow &&
+          summary.yellow.avgBreakdownMin > 0 &&
           `Yellow ${formatDuration(summary.yellow.avgBreakdownMin)}`,
       ].filter(Boolean)
     : [];
@@ -35,10 +36,12 @@ export function RuntimeCard({
                 <ScreenDot screen="red" size="sm" />
                 <span className="font-bold">{formatDuration(summary.red.avgRunMin)}</span>
               </span>
-              <span className="flex items-center gap-1">
-                <ScreenDot screen="yellow" size="sm" />
-                <span className="font-bold">{formatDuration(summary.yellow.avgRunMin)}</span>
-              </span>
+              {summary.yellow && (
+                <span className="flex items-center gap-1">
+                  <ScreenDot screen="yellow" size="sm" />
+                  <span className="font-bold">{formatDuration(summary.yellow.avgRunMin)}</span>
+                </span>
+              )}
             </>
           ) : (
             <span className="text-muted">No data</span>

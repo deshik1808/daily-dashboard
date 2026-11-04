@@ -66,9 +66,6 @@ export default async function EditRuntimePage({
             red_runtime_min: log.red_runtime_min,
             red_breakdown_min: log.red_breakdown_min,
             red_breakdown_reasons: log.red_breakdown_reasons,
-            yellow_runtime_min: log.yellow_runtime_min,
-            yellow_breakdown_min: log.yellow_breakdown_min,
-            yellow_breakdown_reasons: log.yellow_breakdown_reasons,
             meter,
           }}
         />

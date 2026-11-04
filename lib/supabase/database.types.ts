@@ -302,14 +302,14 @@ export type Database = {
           id: string
           log_date: string
           phase_agency_id: string
-          red_breakdown_min: number
+          red_breakdown_min: number | null
           red_breakdown_reasons: string | null
-          red_runtime_min: number
+          red_runtime_min: number | null
           shift: Database["public"]["Enums"]["shift_enum"]
           updated_at: string
-          yellow_breakdown_min: number
+          yellow_breakdown_min: number | null
           yellow_breakdown_reasons: string | null
-          yellow_runtime_min: number
+          yellow_runtime_min: number | null
         }
         Insert: {
           created_at?: string
@@ -318,14 +318,14 @@ export type Database = {
           id?: string
           log_date: string
           phase_agency_id: string
-          red_breakdown_min?: number
+          red_breakdown_min?: number | null
           red_breakdown_reasons?: string | null
-          red_runtime_min: number
+          red_runtime_min: number | null
           shift: Database["public"]["Enums"]["shift_enum"]
           updated_at?: string
-          yellow_breakdown_min?: number
+          yellow_breakdown_min?: number | null
           yellow_breakdown_reasons?: string | null
-          yellow_runtime_min: number
+          yellow_runtime_min?: number | null
         }
         Update: {
           created_at?: string
@@ -334,14 +334,14 @@ export type Database = {
           id?: string
           log_date?: string
           phase_agency_id?: string
-          red_breakdown_min?: number
+          red_breakdown_min?: number | null
           red_breakdown_reasons?: string | null
-          red_runtime_min?: number
+          red_runtime_min?: number | null
           shift?: Database["public"]["Enums"]["shift_enum"]
           updated_at?: string
-          yellow_breakdown_min?: number
+          yellow_breakdown_min?: number | null
           yellow_breakdown_reasons?: string | null
-          yellow_runtime_min?: number
+          yellow_runtime_min?: number | null
         }
         Relationships: [
           {

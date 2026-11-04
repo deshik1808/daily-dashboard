@@ -27,12 +27,10 @@ import {
 export interface RuntimeInitialValues {
   log_date: string;
   shift: "Day" | "Night";
-  red_runtime_min: number;
-  red_breakdown_min: number;
+  /** Null while the shift is open (opening reading saved, closing still to come). */
+  red_runtime_min: number | null;
+  red_breakdown_min: number | null;
   red_breakdown_reasons: string | null;
-  yellow_runtime_min: number;
-  yellow_breakdown_min: number;
-  yellow_breakdown_reasons: string | null;
   /** Saved audit readings, when the shift was entered by meter. */
   meter?: MeterReadings;
 }
@@ -94,24 +92,11 @@ export function RuntimeForm({ phaseAgencyId, logId, initial }: RuntimeFormProps)
         screen="red"
         title="RED SCREEN"
         reasonsPlaceholder="e.g. Belt cut 55 min, power cut 20 min"
-        runtimeMin={initial?.red_runtime_min}
-        breakdownMin={initial?.red_breakdown_min}
+        runtimeMin={initial?.red_runtime_min ?? undefined}
+        breakdownMin={initial?.red_breakdown_min ?? undefined}
         reasons={initial?.red_breakdown_reasons ?? ""}
         meterOpen={initial?.meter?.red_open}
         meterClose={initial?.meter?.red_close}
-        errors={errors}
-        pending={pending}
-      />
-
-      <ScreenSection
-        screen="yellow"
-        title="YELLOW SCREEN"
-        reasonsPlaceholder="e.g. Idle, no material"
-        runtimeMin={initial?.yellow_runtime_min}
-        breakdownMin={initial?.yellow_breakdown_min}
-        reasons={initial?.yellow_breakdown_reasons ?? ""}
-        meterOpen={initial?.meter?.yellow_open}
-        meterClose={initial?.meter?.yellow_close}
         errors={errors}
         pending={pending}
       />
@@ -190,7 +175,7 @@ function HmInputs({ name, defaultMin, blankZero, disabled }: HmInputsProps) {
 }
 
 interface ScreenSectionProps {
-  screen: "red" | "yellow";
+  screen: "red";
   title: string;
   reasonsPlaceholder: string;
   runtimeMin: number | undefined;
@@ -214,14 +199,15 @@ function ScreenSection({
   errors,
   pending,
 }: ScreenSectionProps) {
-  const hasSavedMeter = meterOpen != null && meterClose != null;
+  // An open shift has only the opening reading saved, so any saved opening counts.
+  const hasSavedMeter = meterOpen != null;
   // Meter reading is the default; only a log saved with typed-in hours reopens as manual.
   const hasSavedHours = runtimeMin !== undefined;
   const [mode, setMode] = useState<"manual" | "meter">(
     hasSavedMeter || !hasSavedHours ? "meter" : "manual"
   );
   const [open, setOpen] = useState(hasSavedMeter ? String(meterOpen) : "");
-  const [close, setClose] = useState(hasSavedMeter ? String(meterClose) : "");
+  const [close, setClose] = useState(meterClose != null ? String(meterClose) : "");
 
   const openParsed = parseMeterReading(open);
   const closeParsed = parseMeterReading(close);
@@ -289,7 +275,7 @@ function ScreenSection({
                   htmlFor={`${screen}_meter_close`}
                   className="block text-[10px] font-bold text-muted"
                 >
-                  CLOSING
+                  CLOSING <span className="font-normal">(OPTIONAL)</span>
                 </label>
                 <input
                   id={`${screen}_meter_close`}
@@ -320,7 +306,9 @@ function ScreenSection({
                   (rest of 12 h shift)
                 </>
               ) : (
-                "Hour-meter readings in hours (e.g. 1009.5). Breakdown = 12 h minus runtime."
+                openParsed.ok && openParsed.value !== null && close.trim() === ""
+                  ? "Opening only: it saves now as an open shift. Add the closing reading later with EDIT."
+                  : "Hour-meter readings in hours (e.g. 1009.5). Breakdown = 12 h minus runtime."
               )}
             </p>
           </div>

@@ -75,6 +75,48 @@ test("summarizeRuntime computes rounded averages and handles empty list", () => 
   assert.equal(summary.yellow.avgBreakdownMin, 13);
 });
 
+test("summarizeRuntime skips open shifts and averages yellow only where it exists", () => {
+  const rows = [
+    {
+      log_date: "2026-10-01",
+      shift: "Day",
+      red_runtime_min: 540,
+      red_breakdown_min: 180,
+      yellow_runtime_min: 600,
+      yellow_breakdown_min: 120,
+    },
+    {
+      log_date: "2026-11-01",
+      shift: "Day",
+      red_runtime_min: 600,
+      red_breakdown_min: 120,
+      yellow_runtime_min: null,
+      yellow_breakdown_min: null,
+    },
+    // Open shift: opening reading saved, closing still to come.
+    {
+      log_date: "2026-11-02",
+      shift: "Day",
+      red_runtime_min: null,
+      red_breakdown_min: null,
+    },
+  ];
+
+  const summary = summarizeRuntime(rows);
+  assert.ok(summary);
+  assert.equal(summary.shifts, 2);
+  assert.equal(summary.red.avgRunMin, 570);
+  assert.equal(summary.red.avgBreakdownMin, 150);
+  assert.deepEqual(summary.yellow, { avgRunMin: 600, avgBreakdownMin: 120 });
+
+  // No yellow data anywhere in range -> no yellow summary.
+  const redOnly = summarizeRuntime([rows[1]]);
+  assert.equal(redOnly.yellow, null);
+
+  // Only open shifts -> nothing to average.
+  assert.equal(summarizeRuntime([rows[2]]), null);
+});
+
 test("validateRuntimeLog enforces required fields and valid inputs", () => {
   const today = "2026-10-02";
 
@@ -86,11 +128,6 @@ test("validateRuntimeLog enforces required fields and valid inputs", () => {
     red_breakdown_h: "1",
     red_breakdown_m: "15",
     red_breakdown_reasons: "Belt cut 55 min, power cut 20 min",
-    yellow_runtime_h: "10",
-    yellow_runtime_m: "45",
-    yellow_breakdown_h: "",
-    yellow_breakdown_m: "",
-    yellow_breakdown_reasons: "",
   };
 
   const res = validateRuntimeLog(validPayload, today);
@@ -104,9 +141,7 @@ test("validateRuntimeLog enforces required fields and valid inputs", () => {
     res.value.red_breakdown_reasons,
     "Belt cut 55 min, power cut 20 min"
   );
-  assert.equal(res.value.yellow_runtime_min, 645);
-  assert.equal(res.value.yellow_breakdown_min, 0);
-  assert.equal(res.value.yellow_breakdown_reasons, null);
+  assert.equal("yellow_runtime_min" in res.value, false);
 });
 
 test("validateRuntimeLog enforces the 12 h ceiling per screen", () => {
@@ -121,10 +156,6 @@ test("validateRuntimeLog enforces the 12 h ceiling per screen", () => {
     red_breakdown_h: "2",
     red_breakdown_m: "0",
     red_breakdown_reasons: "Motor failure",
-    yellow_runtime_h: "10",
-    yellow_runtime_m: "0",
-    yellow_breakdown_h: "",
-    yellow_breakdown_m: "",
   };
 
   const res = validateRuntimeLog(overCeilingPayload, today);
@@ -146,8 +177,6 @@ test("validateRuntimeLog requires reasons when breakdown > 0", () => {
     red_breakdown_h: "1",
     red_breakdown_m: "0",
     red_breakdown_reasons: "   ",
-    yellow_runtime_h: "8",
-    yellow_runtime_m: "0",
   };
 
   const res = validateRuntimeLog(missingReasonPayload, today);
@@ -169,8 +198,6 @@ test("validateRuntimeLog allows optional reasons when breakdown is 0", () => {
     red_breakdown_h: "0",
     red_breakdown_m: "0",
     red_breakdown_reasons: "Idle, no material",
-    yellow_runtime_h: "8",
-    yellow_runtime_m: "0",
   };
 
   const res = validateRuntimeLog(zeroBreakdownWithNote, today);
@@ -186,8 +213,6 @@ test("validateRuntimeLog rejects future dates", () => {
     shift: "Day",
     red_runtime_h: "8",
     red_runtime_m: "0",
-    yellow_runtime_h: "8",
-    yellow_runtime_m: "0",
   };
 
   const res = validateRuntimeLog(futurePayload, today);
@@ -203,8 +228,6 @@ test("meter mode computes runtime from closing minus opening", () => {
     red_meter_open: "1000",
     red_meter_close: "1009.5",
     red_breakdown_reasons: "Belt cut",
-    yellow_runtime_h: "12",
-    yellow_runtime_m: "0",
   };
   const res = validateRuntimeLog(base, "2026-10-02");
   assert.equal(res.valid, true);
@@ -227,9 +250,6 @@ test("meter mode computes runtime from closing minus opening", () => {
 
   const tooLong = validateRuntimeLog({ ...base, red_meter_close: "1013" }, "2026-10-02");
   assert.ok(tooLong.errors.red_meter_close);
-
-  const missing = validateRuntimeLog({ ...base, red_meter_close: "" }, "2026-10-02");
-  assert.ok(missing.errors.red_meter_close);
 });
 
 test("validation returns raw meter readings only for meter-mode screens", () => {
@@ -240,19 +260,68 @@ test("validation returns raw meter readings only for meter-mode screens", () => 
       red_mode: "meter",
       red_meter_open: "1000",
       red_meter_close: "1012",
-      yellow_runtime_h: "10",
-      yellow_runtime_m: "0",
-      yellow_breakdown_h: "2",
-      yellow_breakdown_m: "0",
-      yellow_breakdown_reasons: "Idle",
     },
     "2026-10-02"
   );
   assert.equal(res.valid, true);
-  assert.deepEqual(res.meter, {
-    red_open: 1000,
-    red_close: 1012,
-    yellow_open: null,
-    yellow_close: null,
-  });
+  assert.deepEqual(res.meter, { red_open: 1000, red_close: 1012 });
+});
+
+test("meter mode accepts an opening reading alone and leaves the shift open", () => {
+  const res = validateRuntimeLog(
+    {
+      log_date: "2026-10-01",
+      shift: "Day",
+      red_mode: "meter",
+      red_meter_open: "1000.5",
+      red_meter_close: "",
+      red_breakdown_reasons: "",
+    },
+    "2026-10-02"
+  );
+  assert.equal(res.valid, true);
+  assert.equal(res.value.red_runtime_min, null);
+  assert.equal(res.value.red_breakdown_min, null);
+  assert.equal(res.value.red_breakdown_reasons, null);
+  assert.deepEqual(res.meter, { red_open: 1000.5, red_close: null });
+});
+
+test("meter mode still needs an opening reading, even with a closing one", () => {
+  const blank = validateRuntimeLog(
+    { log_date: "2026-10-01", shift: "Day", red_mode: "meter", red_meter_open: "" },
+    "2026-10-02"
+  );
+  assert.equal(blank.valid, false);
+  assert.equal(blank.errors.red_meter_open, "Enter the opening reading");
+
+  const closeOnly = validateRuntimeLog(
+    {
+      log_date: "2026-10-01",
+      shift: "Day",
+      red_mode: "meter",
+      red_meter_open: "",
+      red_meter_close: "1009",
+    },
+    "2026-10-02"
+  );
+  assert.equal(closeOnly.valid, false);
+  assert.equal(closeOnly.errors.red_meter_open, "Enter the opening reading");
+});
+
+test("completing an open shift with a closing reading computes runtime and breakdown", () => {
+  const res = validateRuntimeLog(
+    {
+      log_date: "2026-10-01",
+      shift: "Day",
+      red_mode: "meter",
+      red_meter_open: "1000",
+      red_meter_close: "1010",
+      red_breakdown_reasons: "- Belt cut",
+    },
+    "2026-10-02"
+  );
+  assert.equal(res.valid, true);
+  assert.equal(res.value.red_runtime_min, 600);
+  assert.equal(res.value.red_breakdown_min, 120);
+  assert.deepEqual(res.meter, { red_open: 1000, red_close: 1010 });
 });

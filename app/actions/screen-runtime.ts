@@ -6,7 +6,7 @@ import { TAGS } from "@/lib/data";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { validateRuntimeLog, type MeterReadings } from "@/lib/runtime";
+import { validateRuntimeLog, type RedMeterReadings } from "@/lib/runtime";
 import { parseRole, canWriteAgency, canEditRecord } from "@/lib/access";
 import { sendPushNotification } from "@/lib/push";
 
@@ -45,19 +45,11 @@ function readRuntimeForm(formData: FormData): Record<string, unknown> {
     red_mode: formData.get("red_mode"),
     red_meter_open: formData.get("red_meter_open"),
     red_meter_close: formData.get("red_meter_close"),
-    yellow_runtime_h: formData.get("yellow_runtime_h"),
-    yellow_runtime_m: formData.get("yellow_runtime_m"),
-    yellow_breakdown_h: formData.get("yellow_breakdown_h"),
-    yellow_breakdown_m: formData.get("yellow_breakdown_m"),
-    yellow_breakdown_reasons: formData.get("yellow_breakdown_reasons"),
-    yellow_mode: formData.get("yellow_mode"),
-    yellow_meter_open: formData.get("yellow_meter_open"),
-    yellow_meter_close: formData.get("yellow_meter_close"),
   };
 }
 
-function hasMeter(m: MeterReadings | undefined): m is MeterReadings {
-  return Boolean(m && (m.red_open !== null || m.yellow_open !== null));
+function hasMeter(m: RedMeterReadings | undefined): m is RedMeterReadings {
+  return Boolean(m && m.red_open !== null);
 }
 
 async function getAuthContext() {
@@ -146,11 +138,12 @@ export async function createRuntimeLog(
 
   const logDate = validation.value.log_date;
   const shift = validation.value.shift;
+  const isOpen = validation.value.red_runtime_min === null;
 
   after(async () => {
     await sendPushNotification({
       title: "Screen Runtime",
-      body: `Card Box screen runtime logged · ${formatNotificationDate(logDate)}, ${shift} shift`,
+      body: `Card Box ${isOpen ? "opening meter reading" : "screen runtime"} logged · ${formatNotificationDate(logDate)}, ${shift} shift`,
       url: `/phase/${phaseAgencyId}`,
     });
   });
@@ -209,14 +202,15 @@ export async function updateRuntimeLog(
     return { error: PERMISSION_MESSAGE };
   }
 
-  // Readings follow the latest saved entry: upsert in meter mode, clear in manual mode.
+  // Red readings follow the latest saved entry: upsert in meter mode, clear in manual
+  // mode. Only red columns are named, so yellow readings from earlier shifts stay put.
   const meterResult = hasMeter(validation.meter)
     ? await supabase
         .from("screen_meter_readings")
         .upsert({ runtime_log_id: logId, ...validation.meter })
     : await supabase
         .from("screen_meter_readings")
-        .update({ red_open: null, red_close: null, yellow_open: null, yellow_close: null })
+        .update({ red_open: null, red_close: null })
         .eq("runtime_log_id", logId);
   if (meterResult.error) {
     console.error("updateRuntimeLog meter save failed:", meterResult.error);
