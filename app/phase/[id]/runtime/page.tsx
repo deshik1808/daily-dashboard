@@ -12,6 +12,7 @@ import { RuntimeSummaryTable } from "@/components/design/RuntimeSummary";
 import { getMeterReadings } from "@/lib/meter-readings";
 import { RuntimeRow } from "@/components/design/RuntimeRow";
 import { ReplyButton } from "@/components/design/ReplyButton";
+import { RuntimeReportDownload } from "@/components/design/RuntimeReportDownload";
 
 export default async function FullRuntimePage({
   params,
@@ -29,6 +30,12 @@ export default async function FullRuntimePage({
     // eslint-disable-next-line react-hooks/purity
     since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   }
+
+  // The download form starts on the last 30 days, ending today (UTC, as entries use).
+  const reportTo = new Date().toISOString().slice(0, 10);
+  const reportFrom = new Date(Date.parse(reportTo) - 29 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 
   const [session, phase, logs] = await Promise.all([
     getSession(),
@@ -67,6 +74,14 @@ export default async function FullRuntimePage({
         )}
 
         <Window title="RUNTIME LOG">
+          {session?.role === "editor" && (
+            <RuntimeReportDownload
+              phaseId={id}
+              defaultFrom={reportFrom}
+              defaultTo={reportTo}
+            />
+          )}
+
           {canAdd && (
             <Link
               href={`/runtime/new?phase=${id}`}
