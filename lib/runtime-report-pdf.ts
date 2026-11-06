@@ -171,15 +171,18 @@ export async function buildRuntimeReportPdf(input: RuntimeReportInput): Promise<
       if (input.totals) {
         // One simple line: total working hours of each screen over the period.
         // Explicit gaps (in points) rather than padding spaces, which render unevenly.
+        const shifts = (n: number) => `(${n} shift${n === 1 ? "" : "s"})`;
         const segments: { value: string; font: PDFFont; gap: number }[] = [
           { value: "Total working hours", font: bold, gap: 0 },
           { value: "Red screen:", font: regular, gap: 20 },
           { value: formatDuration(input.totals.redMin), font: bold, gap: 5 },
+          { value: shifts(input.totals.redShifts), font: regular, gap: 4 },
         ];
         if (input.totals.yellowMin !== null) {
           segments.push(
             { value: "Yellow screen:", font: regular, gap: 20 },
-            { value: formatDuration(input.totals.yellowMin), font: bold, gap: 5 }
+            { value: formatDuration(input.totals.yellowMin), font: bold, gap: 5 },
+            { value: shifts(input.totals.yellowShifts), font: regular, gap: 4 }
           );
         }
         let x = MARGIN;

@@ -92,6 +92,10 @@ export interface ReportTotals {
   redMin: number;
   /** Null when no shift in the period carries yellow data. */
   yellowMin: number | null;
+  /** Shifts the red screen actually ran (runtime above zero). */
+  redShifts: number;
+  /** Shifts the yellow screen actually ran; 0 when it has no data in the period. */
+  yellowShifts: number;
   /** Shifts still awaiting their closing reading: they have no runtime to count. */
   openShifts: number;
 }
@@ -110,6 +114,8 @@ export function reportTotals(
       yellow.length > 0
         ? yellow.reduce((sum, l) => sum + (l.yellow_runtime_min ?? 0), 0)
         : null,
+    redShifts: inRange.filter((l) => (l.red_runtime_min ?? 0) > 0).length,
+    yellowShifts: yellow.filter((l) => (l.yellow_runtime_min ?? 0) > 0).length,
     openShifts: inRange.filter((l) => l.red_runtime_min == null).length,
   };
 }

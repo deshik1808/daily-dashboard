@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { validateRuntimeLog } from "../lib/runtime.ts";
 import {
   validateReportRange,
   buildReportRows,
@@ -135,6 +136,8 @@ test("reportTotals adds up working time per screen and counts open shifts", () =
   assert.deepEqual(reportTotals(logs, "2026-10-01", "2026-10-31"), {
     redMin: 1170,
     yellowMin: 540,
+    redShifts: 2,
+    yellowShifts: 1,
     openShifts: 1,
   });
 
@@ -142,14 +145,60 @@ test("reportTotals adds up working time per screen and counts open shifts", () =
   assert.deepEqual(reportTotals(logs, "2026-11-01", "2026-11-30"), {
     redMin: 60,
     yellowMin: null,
+    redShifts: 1,
+    yellowShifts: 0,
     openShifts: 0,
   });
 
   assert.deepEqual(reportTotals([], "2026-10-01", "2026-10-31"), {
     redMin: 0,
     yellowMin: null,
+    redShifts: 0,
+    yellowShifts: 0,
     openShifts: 0,
   });
+});
+
+test("an idle shift entered as meter 0 and 0 is not counted as a running shift", () => {
+  const entered = validateRuntimeLog(
+    {
+      log_date: "2026-10-01",
+      shift: "Night",
+      red_mode: "meter",
+      red_meter_open: "0",
+      red_meter_close: "0",
+      red_breakdown_reasons: "Screen idle",
+    },
+    "2026-10-02"
+  );
+  assert.equal(entered.valid, true);
+  assert.equal(entered.value.red_runtime_min, 0);
+  assert.equal(entered.value.red_breakdown_min, 720);
+
+  const t = reportTotals(
+    [
+      { ...entered.value, id: "idle" },
+      { log_date: "2026-10-02", shift: "Day", red_runtime_min: 540, red_breakdown_min: 180 },
+    ],
+    "2026-10-01",
+    "2026-10-31"
+  );
+  assert.equal(t.redShifts, 1);
+  assert.equal(t.redMin, 540);
+  assert.equal(t.openShifts, 0);
+});
+
+test("reportTotals counts only shifts where the screen actually ran", () => {
+  const t = reportTotals(
+    [
+      { log_date: "2026-10-01", shift: "Day", red_runtime_min: 0, red_breakdown_min: 720 },
+      { log_date: "2026-10-01", shift: "Night", red_runtime_min: 300, red_breakdown_min: 420 },
+    ],
+    "2026-10-01",
+    "2026-10-31"
+  );
+  assert.equal(t.redShifts, 1);
+  assert.equal(t.redMin, 300);
 });
 
 test("buildReportRows returns no rows for an empty period", () => {
