@@ -11,6 +11,7 @@ import {
   buildReportRows,
   formatReportDate,
   reportFileName,
+  reportTotals,
   validateReportRange,
 } from "@/lib/runtime-report";
 import { buildRuntimeReportPdf } from "@/lib/runtime-report-pdf";
@@ -49,11 +50,12 @@ export async function GET(
   const rows = buildReportRows(logs, meterByLog, range.from, range.to);
 
   const pdf = await buildRuntimeReportPdf({
-    orgName: "Bio-Mining & MRF, Tirupati",
+    orgName: "Bio-Mining, Tirupati",
     title: "Screen Runtime Report",
     subtitle: `${agency} · ${phase.phase ?? ""}`.trim(),
     period: `${formatReportDate(range.from)} to ${formatReportDate(range.to)}`,
     generated: formatReportDate(today),
+    totals: rows.length > 0 ? reportTotals(logs, range.from, range.to) : null,
     rows,
   });
 

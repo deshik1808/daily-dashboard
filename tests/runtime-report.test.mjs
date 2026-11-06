@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   validateReportRange,
   buildReportRows,
+  reportTotals,
   formatReportDate,
   pdfSafeText,
   reportFileName,
@@ -127,6 +128,28 @@ test("buildReportRows formats runtime, breakdown, meter and reasons", () => {
   assert.equal(night.runtime, "10 h 00 m");
   assert.equal(night.breakdown, "2 h 00 m");
   assert.equal(night.reasons, "- Belt cut\n- Power cut");
+});
+
+test("reportTotals adds up working time per screen and counts open shifts", () => {
+  // In range: a (Red 570, Yellow 540), b (open), c (Red 600). Others are outside.
+  assert.deepEqual(reportTotals(logs, "2026-10-01", "2026-10-31"), {
+    redMin: 1170,
+    yellowMin: 540,
+    openShifts: 1,
+  });
+
+  // No yellow data in the period -> no yellow total.
+  assert.deepEqual(reportTotals(logs, "2026-11-01", "2026-11-30"), {
+    redMin: 60,
+    yellowMin: null,
+    openShifts: 0,
+  });
+
+  assert.deepEqual(reportTotals([], "2026-10-01", "2026-10-31"), {
+    redMin: 0,
+    yellowMin: null,
+    openShifts: 0,
+  });
 });
 
 test("buildReportRows returns no rows for an empty period", () => {

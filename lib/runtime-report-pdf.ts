@@ -3,7 +3,8 @@
 // Row content comes pre-built from lib/runtime-report.ts; this file is only layout.
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import { pdfSafeText, type ReportRow } from "./runtime-report.ts";
+import { formatDuration } from "./runtime.ts";
+import { pdfSafeText, type ReportRow, type ReportTotals } from "./runtime-report.ts";
 
 export interface RuntimeReportInput {
   orgName: string;
@@ -12,6 +13,8 @@ export interface RuntimeReportInput {
   subtitle: string;
   period: string;
   generated: string;
+  /** Working-hours summary line; null leaves it out (e.g. an empty period). */
+  totals: ReportTotals | null;
   rows: ReportRow[];
 }
 
@@ -164,6 +167,40 @@ export async function buildRuntimeReportPdf(input: RuntimeReportInput): Promise<
         color: INK,
       });
       y -= 12;
+
+      if (input.totals) {
+        // One simple line: total working hours of each screen over the period.
+        // Explicit gaps (in points) rather than padding spaces, which render unevenly.
+        const segments: { value: string; font: PDFFont; gap: number }[] = [
+          { value: "Total working hours", font: bold, gap: 0 },
+          { value: "Red screen:", font: regular, gap: 20 },
+          { value: formatDuration(input.totals.redMin), font: bold, gap: 5 },
+        ];
+        if (input.totals.yellowMin !== null) {
+          segments.push(
+            { value: "Yellow screen:", font: regular, gap: 20 },
+            { value: formatDuration(input.totals.yellowMin), font: bold, gap: 5 }
+          );
+        }
+        let x = MARGIN;
+        for (const seg of segments) {
+          x += seg.gap;
+          text(seg.value, x, y - 10, { font: seg.font, size: 10 });
+          x += seg.font.widthOfTextAtSize(pdfSafeText(seg.value), 10);
+        }
+        y -= 16;
+        if (input.totals.openShifts > 0) {
+          const n = input.totals.openShifts;
+          text(
+            `Excludes ${n} shift${n === 1 ? "" : "s"} still awaiting the closing reading.`,
+            MARGIN,
+            y - 8,
+            { size: 8, color: MUTED }
+          );
+          y -= 14;
+        }
+        y -= 4;
+      }
     } else {
       text(`${input.title} (continued)`, MARGIN, y - 9, { size: 9, color: MUTED });
       y -= 22;

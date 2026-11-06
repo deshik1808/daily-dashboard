@@ -76,6 +76,44 @@ function breakdownText(min: number | null | undefined) {
   return min ? formatDuration(min) : dash;
 }
 
+/** Logs inside [from, to], chronological (oldest first, Day before Night). */
+function logsInPeriod(logs: ScreenRuntimeLog[], from: string, to: string) {
+  return logs
+    .filter((l) => l.log_date >= from && l.log_date <= to)
+    .sort((a, b) => {
+      if (a.log_date !== b.log_date) return a.log_date < b.log_date ? -1 : 1;
+      if (a.shift === b.shift) return 0;
+      return a.shift === "Day" ? -1 : 1;
+    });
+}
+
+export interface ReportTotals {
+  /** Total working (run) minutes of the red screen over the period. */
+  redMin: number;
+  /** Null when no shift in the period carries yellow data. */
+  yellowMin: number | null;
+  /** Shifts still awaiting their closing reading: they have no runtime to count. */
+  openShifts: number;
+}
+
+/** Total working time per screen over the period. */
+export function reportTotals(
+  logs: ScreenRuntimeLog[],
+  from: string,
+  to: string
+): ReportTotals {
+  const inRange = logsInPeriod(logs, from, to);
+  const yellow = inRange.filter((l) => l.yellow_runtime_min != null);
+  return {
+    redMin: inRange.reduce((sum, l) => sum + (l.red_runtime_min ?? 0), 0),
+    yellowMin:
+      yellow.length > 0
+        ? yellow.reduce((sum, l) => sum + (l.yellow_runtime_min ?? 0), 0)
+        : null,
+    openShifts: inRange.filter((l) => l.red_runtime_min == null).length,
+  };
+}
+
 /**
  * Turns runtime logs into table rows for the report: chronological (oldest first,
  * Day before Night), limited to [from, to], one row per screen. Yellow rows appear
@@ -87,13 +125,7 @@ export function buildReportRows(
   from: string,
   to: string
 ): ReportRow[] {
-  const inRange = logs
-    .filter((l) => l.log_date >= from && l.log_date <= to)
-    .sort((a, b) => {
-      if (a.log_date !== b.log_date) return a.log_date < b.log_date ? -1 : 1;
-      if (a.shift === b.shift) return 0;
-      return a.shift === "Day" ? -1 : 1;
-    });
+  const inRange = logsInPeriod(logs, from, to);
 
   const rows: ReportRow[] = [];
   inRange.forEach((log, group) => {

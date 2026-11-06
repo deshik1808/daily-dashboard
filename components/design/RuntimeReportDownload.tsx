@@ -1,10 +1,7 @@
 // components/design/RuntimeReportDownload.tsx
 // Editor-only: pick a From and To date, then download the shift-wise runtime PDF.
 // A plain GET form, so it needs no client JavaScript; the browser saves the file.
-import {
-  inputClass,
-  buttonPrimaryClass,
-} from "@/components/design/FormField";
+import { inputClass } from "@/components/design/FormField";
 
 export function RuntimeReportDownload({
   phaseId,
@@ -17,7 +14,7 @@ export function RuntimeReportDownload({
 }) {
   return (
     <details className="mb-2.5 rounded-control border border-ink">
-      <summary className="min-h-[44px] cursor-pointer list-none px-3 py-3 text-center text-xs font-bold tracking-wide [&::-webkit-details-marker]:hidden">
+      <summary className="cursor-pointer list-none py-2 text-center text-xs font-bold tracking-wide [&::-webkit-details-marker]:hidden">
         DOWNLOAD PDF
       </summary>
       <form
@@ -49,7 +46,10 @@ export function RuntimeReportDownload({
             />
           </label>
         </div>
-        <button type="submit" className={`${buttonPrimaryClass} w-full`}>
+        <button
+          type="submit"
+          className="block w-full rounded-control border border-ink bg-ink py-2 text-center text-xs font-bold tracking-wide text-paper hover:bg-ink/90 focus:outline-hidden focus:ring-2 focus:ring-accent-ink"
+        >
           DOWNLOAD
         </button>
       </form>
